@@ -61,7 +61,7 @@ const ARACLAR = [
 ];
 
 const ayar = {
-  bolAdim: 1, aralik: '', derece: 90, donAralik: '', dpi: 150, jpg: false, taraFiltre: 'tarama',
+  bolAdim: 1, aralik: '', derece: 90, donAralik: '', dpi: 150, jpg: false, taraFiltre: 'tarama', taraModel: 'klasik',
   seviye: 2, parolaKip: 'koy', konum: 'alt-orta', bicim: '{n} / {N}', baslangic: 1, filigranMetin: 'GİZLİ', opaklik: 0.25,
 };
 // Parola diske yazılmaz; yalnızca bu oturumda bellekte durur.
@@ -121,7 +121,10 @@ function seceneklerCiz() {
     s.innerHTML = `<span class="secenek">Yön ${parcali('derece', [[90, '↻ Sağa 90°'], [180, '180°'], [270, '↺ Sola 90°']], ayar.derece)}</span>
       <label class="secenek">Sayfalar <input type="text" id="donAralik" placeholder="boş = hepsi" value="${kacis(ayar.donAralik)}"></label>`;
   } else if (arac.id === 'tara') {
-    s.innerHTML = `<span class="secenek">Görünüm ${parcali('taraFiltre', FILTRELER, ayar.taraFiltre)}</span>`;
+    s.innerHTML = `<span class="secenek">Görünüm ${parcali('taraFiltre', FILTRELER, ayar.taraFiltre)}</span>
+      <label class="secenek">Köşe bulucu <select id="taraModel">${modelSecenekleri()}</select></label>
+      <span class="secenek" id="model-eylem">${modelEylemi()}</span>
+      <span class="ipucu model-not">${modelNotu()}</span>`;
   } else if (arac.id === 'sikistir') {
     s.innerHTML = `<span class="secenek">Seviye ${parcali('seviye', [[1, 'Hafif'], [2, 'Orta'], [3, 'Güçlü']], ayar.seviye)}</span>`;
   } else if (arac.id === 'parola') {
@@ -368,13 +371,108 @@ invoke('office_durumu').then((var_) => {
   if (var_.length === 3) not.textContent = 'Office: PowerPoint, Word, Excel hazır';
   else if (var_.length === 0) { not.textContent = 'Office bulunamadı — PDF\'e çevirme çalışmaz'; not.classList.add('uyari'); }
   else { not.textContent = `Office: yalnızca ${var_.join(', ')}`; not.classList.add('uyari'); }
-  // Tarama modeli: yüklemesi biraz sürer, Office notunun altına sonradan eklenir.
-  invoke('model_durumu').then((hazir) => {
-    const s = document.createElement('div');
-    s.textContent = hazir ? 'Tarama modeli: hazır' : 'Tarama modeli yok — klasik köşe bulma';
-    if (!hazir) s.className = 'uyari';
-    not.appendChild(s);
-  });
+  const s = document.createElement('div');
+  s.id = 'model-notu';
+  not.appendChild(s);
+  modelleriYukle();
+});
+
+// ---------- Köşe bulma modelleri ----------
+// Modeller uygulamayla gelmez; kullanıcı seçer ve model sahibinin kaynağından indirilir.
+let modelListesi = []; // { kimlik, ad, aciklama, mb, indirildi }
+const indirilen = new Map(); // kimlik → yüzde (indirme sürerken)
+
+async function modelleriYukle() {
+  try { modelListesi = await invoke('modeller'); } catch (_) { modelListesi = []; }
+  if (ayar.taraModel !== 'klasik' && !modelListesi.some((m) => m.kimlik === ayar.taraModel)) ayar.taraModel = 'klasik';
+  modelArayuzuGuncelle();
+}
+
+const seciliModel = () => modelListesi.find((m) => m.kimlik === ayar.taraModel);
+/// Seçili model indirilmişse onun kimliği, değilse "klasik".
+const kullanilacakModel = () => (seciliModel()?.indirildi ? ayar.taraModel : 'klasik');
+
+function modelSecenekleri() {
+  const s = [`<option value="klasik" ${ayar.taraModel === 'klasik' ? 'selected' : ''}>Klasik (model yok)</option>`];
+  for (const m of modelListesi) {
+    s.push(`<option value="${m.kimlik}" ${m.kimlik === ayar.taraModel ? 'selected' : ''}>${kacis(m.ad)}${m.indirildi ? '' : ` — ${Math.round(m.mb)} MB indirilecek`}</option>`);
+  }
+  return s.join('');
+}
+
+function modelEylemi() {
+  const m = seciliModel();
+  if (!m) return '';
+  if (indirilen.has(m.kimlik)) return `<span class="ipucu">İndiriliyor… %${indirilen.get(m.kimlik)}</span>`;
+  if (!m.indirildi) return `<button class="ikincil kucuk-dugme" data-model-indir="${m.kimlik}">İndir (${Math.round(m.mb)} MB)</button>`;
+  return `<span class="ipucu">Hazır</span> <button class="metin" data-model-sil="${m.kimlik}">Sil</button>`;
+}
+
+function modelNotu() {
+  const m = seciliModel();
+  if (!m) return 'Model gerektirmez; dağınık zeminde ve gölgede yanılabilir.';
+  return `${kacis(m.aciklama)}. DocsaidLab/DocAligner projesinden, kendi kaynağından indirilir (kod Apache-2.0). Doğruluğu ve lisansı modelin sahibine aittir.`;
+}
+
+function modelArayuzuGuncelle() {
+  const m = seciliModel();
+  const not = $('#model-notu');
+  if (not) {
+    not.textContent = m?.indirildi ? `Köşe bulucu: ${m.ad}` : 'Köşe bulucu: klasik';
+    not.className = m && !m.indirildi ? 'uyari' : '';
+  }
+  if (arac.id === 'tara') seceneklerCiz();
+}
+
+/// Elle düzeltilmemiş sayfalarda köşeleri yeni bulucuyla yeniden arar.
+async function koseleriYenidenBul() {
+  for (const s of sayfalar) {
+    if (!s.foto || s.hata || JSON.stringify(s.kose) !== JSON.stringify(s.otoKose)) continue;
+    try {
+      const h = await invoke('tarama_hazirla', { dosya: s.dosya, model: kullanilacakModel() });
+      Object.assign(s, { kose: h.kose, otoKose: h.kose, yol: h.yol });
+      onizle(s);
+    } catch (_) {}
+  }
+}
+
+$('#secenekler').addEventListener('change', (e) => {
+  if (e.target.id !== 'taraModel') return;
+  ayar.taraModel = e.target.value;
+  kaydetAyar();
+  modelArayuzuGuncelle();
+  koseleriYenidenBul();
+});
+
+$('#secenekler').addEventListener('click', async (e) => {
+  const indir = e.target.closest('[data-model-indir]')?.dataset.modelIndir;
+  const sil = e.target.closest('[data-model-sil]')?.dataset.modelSil;
+  if (indir) {
+    indirilen.set(indir, 0);
+    modelArayuzuGuncelle();
+    try {
+      await invoke('model_indir', { kimlik: indir });
+      indirilen.delete(indir);
+      await modelleriYukle();
+      koseleriYenidenBul();
+    } catch (h) {
+      indirilen.delete(indir);
+      modelArayuzuGuncelle();
+      const anahtar = `is-${++isSayac}`;
+      isEkle(anahtar, 'Model indirme', '');
+      isGuncelle(anahtar, 'hata', String(h), []);
+    }
+  } else if (sil) {
+    await invoke('model_sil', { kimlik: sil }).catch(() => {});
+    await modelleriYukle();
+  }
+});
+
+listen('model-ilerleme', ({ payload: p }) => {
+  if (!indirilen.has(p.kimlik)) return;
+  indirilen.set(p.kimlik, Math.floor((p.inen * 100) / p.toplam));
+  const el = $('#model-eylem');
+  if (el && seciliModel()?.kimlik === p.kimlik) el.innerHTML = modelEylemi();
 });
 
 // ---------- Belge tarama ----------
@@ -387,8 +485,8 @@ async function taramaEkle(dosya) {
   sayfalar.push(s);
   kartlariCiz();
   try {
-    const h = await invoke('tarama_hazirla', { dosya });
-    Object.assign(s, { foto: h.foto, gen: h.gen, yuk: h.yuk, kose: h.kose, otoKose: h.kose });
+    const h = await invoke('tarama_hazirla', { dosya, model: kullanilacakModel() });
+    Object.assign(s, { foto: h.foto, gen: h.gen, yuk: h.yuk, kose: h.kose, otoKose: h.kose, yol: h.yol });
     await onizle(s);
   } catch (e) {
     s.hata = String(e);
@@ -513,9 +611,25 @@ function duzenleyiciAc(s) {
   duzenlenen = s;
   taslak = { kose: s.kose.map((k) => [...k]), filtre: s.filtre };
   $('#d-foto').src = s.foto;
+  $('#d-sonuc').src = s.onizleme || '';
   $('#duzenleyici').hidden = false;
   dFiltreCiz();
-  $('#d-foto').decode().catch(() => {}).then(cokgenCiz);
+  $('#d-foto').decode().catch(() => {}).then(() => { cokgenCiz(); sonucuGuncelle(); });
+}
+
+// Sağdaki "sonuç": perspektifi düzeltilmiş ve filtrelenmiş sayfa. Köşe bırakılınca yenilenir.
+let sonucIstek = 0;
+async function sonucuGuncelle() {
+  if (!duzenlenen) return;
+  const no = ++sonucIstek;
+  $('#d-sonuc-kutu').classList.add('yenileniyor');
+  try {
+    const url = await invoke('tarama_onizle', {
+      sayfa: { dosya: duzenlenen.dosya, kose: taslak.kose, donus: duzenlenen.donus, filtre: taslak.filtre }, boyut: 1100,
+    });
+    if (no === sonucIstek && duzenlenen) $('#d-sonuc').src = url;
+  } catch (_) {}
+  if (no === sonucIstek) $('#d-sonuc-kutu').classList.remove('yenileniyor');
 }
 
 function dFiltreCiz() { $('#d-filtre').innerHTML = parcali('dFiltre', FILTRELER, taslak.filtre); }
@@ -579,6 +693,7 @@ $('#d-svg').addEventListener('pointerdown', (e) => {
     window.removeEventListener('pointercancel', birak);
     c.classList.remove('aktif');
     buyutecGizle();
+    sonucuGuncelle();
   };
   window.addEventListener('pointermove', hareket);
   window.addEventListener('pointerup', birak);
@@ -587,10 +702,10 @@ $('#d-svg').addEventListener('pointerdown', (e) => {
 
 $('#d-filtre').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
-  if (b) { taslak.filtre = b.dataset.v; dFiltreCiz(); }
+  if (b) { taslak.filtre = b.dataset.v; dFiltreCiz(); sonucuGuncelle(); }
 });
-$('#d-otomatik').addEventListener('click', () => { taslak.kose = duzenlenen.otoKose.map((k) => [...k]); cokgenCiz(); });
-$('#d-tum').addEventListener('click', () => { taslak.kose = [[0, 0], [1, 0], [1, 1], [0, 1]]; cokgenCiz(); });
+$('#d-otomatik').addEventListener('click', () => { taslak.kose = duzenlenen.otoKose.map((k) => [...k]); cokgenCiz(); sonucuGuncelle(); });
+$('#d-tum').addEventListener('click', () => { taslak.kose = [[0, 0], [1, 0], [1, 1], [0, 1]]; cokgenCiz(); sonucuGuncelle(); });
 const duzenleyiciKapat = () => { $('#duzenleyici').hidden = true; duzenlenen = null; };
 $('#d-iptal').addEventListener('click', duzenleyiciKapat);
 $('#d-uygula').addEventListener('click', () => {

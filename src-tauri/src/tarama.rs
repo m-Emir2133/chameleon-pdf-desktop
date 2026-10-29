@@ -135,10 +135,13 @@ fn parlaklikla(gri: &GrayImage) -> Option<[(f32, f32); 4]> {
     uc_koseler(&govde)
 }
 
-/// Belgenin köşelerini bulur: önce DocAligner modeli, o yoksa ya da köşe çıkmazsa klasik yöntem.
-pub fn koseleri_bul(img: &DynamicImage) -> (Kose, &'static str) {
-    if let Some(k) = crate::model::koseler(img) {
-        return (k, "model");
+/// Belgenin köşelerini bulur: `model` "klasik" değilse ve indirilmişse o model, aksi halde (ya da
+/// model bir köşe bulamazsa) klasik yöntem.
+pub fn koseleri_bul(img: &DynamicImage, model: &str) -> (Kose, &'static str) {
+    if model != "klasik" {
+        if let Some(k) = crate::model::koseler(img, model) {
+            return (k, "model");
+        }
     }
     klasik_koseler(img)
 }

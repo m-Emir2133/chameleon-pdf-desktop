@@ -116,7 +116,7 @@ fn belge_tespiti() {
     for (ad, deger) in &gercek {
         let img = tarama::ac(&k.join(ad)).unwrap();
         let t = std::time::Instant::now();
-        let (bulunan, yol) = tarama::koseleri_bul(&img);
+        let (bulunan, yol) = tarama::koseleri_bul(&img, "docaligner-sa24");
         let sure = t.elapsed();
         bulunanlar.insert(ad.clone(), serde_json::json!(bulunan));
         let (w, h) = (img.width() as f32, img.height() as f32);
@@ -147,7 +147,7 @@ fn belge_tespiti() {
         .take(3)
         .map(|ad| {
             let img = tarama::ac(&k.join(ad)).unwrap();
-            let (kose, _) = tarama::koseleri_bul(&img);
+            let (kose, _) = tarama::koseleri_bul(&img, "docaligner-sa24");
             let d = tarama::duzelt(&img, &kose, 0, tarama::Filtre::Tarama, 2400);
             pdf::JpegSayfa { veri: tarama::jpeg(&d, 80), gen: d.width(), yuk: d.height(), gri: true }
         })
@@ -262,7 +262,7 @@ fn arayuz_metin_degisikligi() {
 #[test]
 fn tespit_karsilastir() {
     let Some(k) = std::env::var_os("CHAMELEON_TARAMA").map(PathBuf::from) else { return };
-    assert!(model::var_mi(), "model dosyası bulunamadı");
+    assert!(model::var_mi("docaligner-sa24"), "model dosyası bulunamadı");
     let gercek: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(&std::fs::read_to_string(k.join("gercek.json")).unwrap()).unwrap();
     let mut basari = [0; 3];
@@ -283,7 +283,7 @@ fn tespit_karsilastir() {
         let klasik = tarama::klasik_koseler(&img).0;
         sure[0] += t.elapsed();
         let t = std::time::Instant::now();
-        let m = model::koseler(&img).unwrap();
+        let m = model::koseler(&img, "docaligner-sa24").unwrap();
         sure[1] += t.elapsed();
         let t = std::time::Instant::now();
         let mh = tarama::hassaslastir(&img, m);
@@ -299,4 +299,24 @@ fn tespit_karsilastir() {
     let n = gercek.len() as u32;
     eprintln!("başarılı: klasik {}/{n}, model {}/{n}, model+hassas {}/{n}", basari[0], basari[1], basari[2]);
     eprintln!("ort. süre: klasik {:?}, model {:?}, hassaslaştırma (ek) {:?}", sure[0] / n, sure[1] / n, sure[2] / n);
+}
+
+/// Gerçek indirme: en küçük modeli (LCNet100, 4,8 MB) kaynağından indirip boyut/SHA-256 doğrulamasını dener.
+/// İnternet ister; CHAMELEON_INDIRME=1 ile çalışır.
+#[test]
+fn model_indirme() {
+    if std::env::var_os("CHAMELEON_INDIRME").is_none() {
+        return;
+    }
+    let _ = model::sil("docaligner-lcnet100");
+    let son = std::sync::atomic::AtomicU64::new(0);
+    let t = std::time::Instant::now();
+    model::indir("docaligner-lcnet100", |inen, _| son.store(inen, std::sync::atomic::Ordering::Relaxed)).unwrap();
+    eprintln!("indirildi: {} bayt, {:?}", son.load(std::sync::atomic::Ordering::Relaxed), t.elapsed());
+    assert!(model::var_mi("docaligner-lcnet100"));
+    // Kenarları görünen bir fotoğraf gerekir (düz taramada köşe yoktur).
+    if let Some(k) = std::env::var_os("CHAMELEON_TARAMA").map(PathBuf::from) {
+        let ilk = std::fs::read_dir(&k).unwrap().filter_map(|e| e.ok().map(|e| e.path())).find(|p| p.extension().is_some_and(|e| e == "jpg")).unwrap();
+        assert!(model::koseler(&tarama::ac(&ilk).unwrap(), "docaligner-lcnet100").is_some());
+    }
 }

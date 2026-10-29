@@ -245,10 +245,10 @@ struct TaramaOnizleme {
 
 /// Fotoğrafı açar, köşeleri bulur ve düzenleyici için küçük bir önizleme döner.
 #[tauri::command]
-async fn tarama_hazirla(dosya: String) -> Result<TaramaOnizleme, String> {
+async fn tarama_hazirla(dosya: String, model: String) -> Result<TaramaOnizleme, String> {
     arka_planda(move || {
         let img = tarama::ac(Path::new(&dosya))?;
-        let (kose, yol) = tarama::koseleri_bul(&img);
+        let (kose, yol) = tarama::koseleri_bul(&img, &model);
         let kucuk = img.resize(1400, 1400, image::imageops::FilterType::Triangle);
         Ok(TaramaOnizleme { foto: veri_url(&tarama::jpeg(&kucuk, 82)), gen: kucuk.width(), yuk: kucuk.height(), kose, yol })
     })
@@ -263,14 +263,30 @@ struct TaramaSayfa {
     filtre: tarama::Filtre,
 }
 
-/// Düzeltilmiş sayfanın küçük önizlemesi (kart görseli).
+/// Önizlemeler için fotoğrafların 1200 px'lik halleri; köşe her bırakıldığında 12 MP'lik dosyayı
+/// yeniden çözmemek için son birkaç tanesi bellekte tutulur.
+static ONIZLEME_ONBELLEK: std::sync::Mutex<Vec<(String, std::sync::Arc<image::DynamicImage>)>> = std::sync::Mutex::new(Vec::new());
+
+fn onizleme_fotografi(dosya: &str) -> Result<std::sync::Arc<image::DynamicImage>, String> {
+    if let Some((_, img)) = ONIZLEME_ONBELLEK.lock().map_err(|e| e.to_string())?.iter().find(|(d, _)| d == dosya) {
+        return Ok(img.clone());
+    }
+    let img = std::sync::Arc::new(tarama::ac(Path::new(dosya))?.resize(1200, 1200, image::imageops::FilterType::Triangle));
+    let mut ob = ONIZLEME_ONBELLEK.lock().map_err(|e| e.to_string())?;
+    ob.push((dosya.to_string(), img.clone()));
+    if ob.len() > 12 {
+        ob.remove(0);
+    }
+    Ok(img)
+}
+
+/// Düzeltilmiş sayfanın önizlemesi: kartlar için küçük, düzenleyici için `boyut` kadar büyük.
 #[tauri::command]
-async fn tarama_onizle(sayfa: TaramaSayfa) -> Result<String, String> {
+async fn tarama_onizle(sayfa: TaramaSayfa, boyut: Option<u32>) -> Result<String, String> {
     arka_planda(move || {
-        let img = tarama::ac(Path::new(&sayfa.dosya))?;
-        let kucuk = img.resize(1000, 1000, image::imageops::FilterType::Triangle);
-        let d = tarama::duzelt(&kucuk, &sayfa.kose, sayfa.donus, sayfa.filtre, 520);
-        Ok(veri_url(&tarama::jpeg(&d, 80)))
+        let img = onizleme_fotografi(&sayfa.dosya)?;
+        let d = tarama::duzelt(&img, &sayfa.kose, sayfa.donus, sayfa.filtre, boyut.unwrap_or(520).clamp(200, 1200));
+        Ok(veri_url(&tarama::jpeg(&d, 82)))
     })
     .await
 }
@@ -394,10 +410,33 @@ fn klasorde_goster(yol: String) {
     let _ = Command::new("explorer").raw_arg(format!("/select,\"{yol}\"")).spawn();
 }
 
-/// Belge köşesi modeli yüklenebildi mi (ilk çağrıda ~0,4 sn'de yüklenir ve bellekte kalır).
+/// Seçilebilen köşe modelleri ve hangilerinin indirildiği.
 #[tauri::command]
-async fn model_durumu() -> Result<bool, String> {
-    arka_planda(|| Ok(model::var_mi())).await
+async fn modeller() -> Result<Vec<model::Durum>, String> {
+    arka_planda(|| Ok(model::durumlar())).await
+}
+
+#[derive(Clone, Serialize)]
+struct ModelIlerleme {
+    kimlik: String,
+    inen: u64,
+    toplam: u64,
+}
+
+/// Modeli kendi kaynağından indirir; ilerlemeyi "model-ilerleme" olayıyla bildirir.
+#[tauri::command]
+async fn model_indir(app: AppHandle, kimlik: String) -> Result<(), String> {
+    arka_planda(move || {
+        model::indir(&kimlik, |inen, toplam| {
+            let _ = app.emit("model-ilerleme", ModelIlerleme { kimlik: kimlik.clone(), inen, toplam });
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn model_sil(kimlik: String) -> Result<(), String> {
+    arka_planda(move || model::sil(&kimlik)).await
 }
 
 /// Office uygulamalarının kayıtlı olup olmadığı (arayüz uyarısı için).
@@ -460,7 +499,9 @@ fn main() {
             ac,
             klasorde_goster,
             office_durumu,
-            model_durumu
+            modeller,
+            model_indir,
+            model_sil
         ])
         .run(tauri::generate_context!())
         .expect("Chameleon PDF başlatılamadı");
