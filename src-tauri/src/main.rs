@@ -2,6 +2,7 @@
 // (birleştir, böl, sayfa çıkar, döndür, görsel ↔ PDF) yerelde çalıştırır.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod dil;
 mod duzen;
 mod gorsel;
 mod model;
@@ -95,17 +96,17 @@ async fn office(app: AppHandle, dosyalar: Vec<String>) -> Result<(), String> {
             .stderr(Stdio::piped())
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
-            .map_err(|e| format!("PowerShell başlatılamadı: {e}"))?;
+            .map_err(|e| dil::s(format!("PowerShell başlatılamadı: {e}"), format!("Could not start PowerShell: {e}")))?;
         let mut biten = HashSet::new();
         if let Some(cikti) = cocuk.stdout.take() {
             for satir in BufReader::new(cikti).lines().map_while(Result::ok) {
                 let mut p = satir.trim_start_matches('\u{FEFF}').splitn(3, '\t');
                 let (tur, kaynak, ileti) = (p.next().unwrap_or(""), p.next().unwrap_or(""), p.next().unwrap_or(""));
                 match tur {
-                    "BASLA" => bildir(&app, kaynak, "calisiyor", "Office ile çevriliyor…", vec![]),
+                    "BASLA" => bildir(&app, kaynak, "calisiyor", dil::t("Office ile çevriliyor…", "Converting with Office…"), vec![]),
                     "OK" => {
                         biten.insert(kaynak.to_string());
-                        bildir(&app, kaynak, "tamam", "PDF hazır", vec![ileti.to_string()]);
+                        bildir(&app, kaynak, "tamam", dil::t("PDF hazır", "PDF ready"), vec![ileti.to_string()]);
                     }
                     "HATA" => {
                         biten.insert(kaynak.to_string());
@@ -123,7 +124,7 @@ async fn office(app: AppHandle, dosyalar: Vec<String>) -> Result<(), String> {
         let _ = cocuk.wait();
         let _ = std::fs::remove_file(&liste_yolu);
         for d in dosyalar.iter().filter(|d| !biten.contains(*d)) {
-            let ileti = hata_metni.lines().find(|l| !l.trim().is_empty()).unwrap_or("Office yanıt vermedi");
+            let ileti = hata_metni.lines().find(|l| !l.trim().is_empty()).unwrap_or(dil::t("Office yanıt vermedi", "Office did not respond"));
             bildir(&app, d, "hata", office_hatasi(ileti), vec![]);
         }
         Ok(())
@@ -135,13 +136,13 @@ async fn office(app: AppHandle, dosyalar: Vec<String>) -> Result<(), String> {
 fn office_hatasi(ham: &str) -> String {
     let k = ham.to_lowercase();
     if k.contains("80040154") || k.contains("class not registered") || k.contains("sınıf kayıtlı değil") {
-        "Bu dosya türü için Office uygulaması kurulu değil".into()
+        dil::t("Bu dosya türü için Office uygulaması kurulu değil", "No Office application is installed for this file type").into()
     } else if k.contains("password") || k.contains("parola") {
-        "Dosya parola korumalı".into()
+        dil::t("Dosya parola korumalı", "The file is password protected").into()
     } else if ham.is_empty() {
-        "Çevrilemedi".into()
+        dil::t("Çevrilemedi", "Could not convert").into()
     } else {
-        format!("Çevrilemedi: {ham}")
+        dil::s(format!("Çevrilemedi: {ham}"), format!("Could not convert: {ham}"))
     }
 }
 
@@ -150,7 +151,7 @@ async fn birlestir(dosyalar: Vec<String>) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let yollar: Vec<PathBuf> = dosyalar.iter().map(PathBuf::from).collect();
         let ilk = yollar.first().ok_or("Dosya yok")?;
-        let hedef = benzersiz(&klasoru(ilk), &format!("{} - birleştirilmiş", govde(ilk)), "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&klasoru(ilk), &format!("{} - {}", govde(ilk), dil::t("birleştirilmiş", "merged")), "pdf", &mut HashSet::new());
         pdf::birlestir(&yollar, &hedef)?;
         Ok(yazi(&[hedef]))
     })
@@ -161,7 +162,7 @@ async fn birlestir(dosyalar: Vec<String>) -> Result<Vec<String>, String> {
 async fn bol(dosya: String, adim: u32) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let k = PathBuf::from(&dosya);
-        let klasor = benzersiz(&klasoru(&k), &format!("{} - bölünmüş", govde(&k)), "", &mut HashSet::new());
+        let klasor = benzersiz(&klasoru(&k), &format!("{} - {}", govde(&k), dil::t("bölünmüş", "split")), "", &mut HashSet::new());
         std::fs::create_dir_all(&klasor).map_err(|e| e.to_string())?;
         let g = govde(&k);
         let parcalar = pdf::bol(&k, adim, |bas, son, toplam| {
@@ -173,7 +174,7 @@ async fn bol(dosya: String, adim: u32) -> Result<Vec<String>, String> {
             }
         })?;
         let mut sonuc = vec![klasor.to_string_lossy().into_owned()];
-        sonuc.push(format!("{} dosya", parcalar.len()));
+        sonuc.push(dil::s(format!("{} dosya", parcalar.len()), format!("{} files", parcalar.len())));
         Ok(sonuc)
     })
     .await
@@ -184,7 +185,7 @@ async fn sayfa_cikar(dosya: String, aralik: String) -> Result<Vec<String>, Strin
     arka_planda(move || {
         let k = PathBuf::from(&dosya);
         let etiket: String = aralik.chars().filter(|c| c.is_ascii_digit() || *c == '-' || *c == ',').collect();
-        let hedef = benzersiz(&klasoru(&k), &format!("{} - sayfa {}", govde(&k), etiket.replace(',', "_")), "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&klasoru(&k), &format!("{} - {} {}", govde(&k), dil::t("sayfa", "pages"), etiket.replace(',', "_")), "pdf", &mut HashSet::new());
         pdf::sayfa_cikar(&k, &aralik, &hedef)?;
         Ok(yazi(&[hedef]))
     })
@@ -195,7 +196,7 @@ async fn sayfa_cikar(dosya: String, aralik: String) -> Result<Vec<String>, Strin
 async fn dondur(dosya: String, derece: i64, aralik: String) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let k = PathBuf::from(&dosya);
-        let hedef = benzersiz(&klasoru(&k), &format!("{} - döndürülmüş", govde(&k)), "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&klasoru(&k), &format!("{} - {}", govde(&k), dil::t("döndürülmüş", "rotated")), "pdf", &mut HashSet::new());
         pdf::dondur(&k, derece, &aralik, &hedef)?;
         Ok(yazi(&[hedef]))
     })
@@ -206,8 +207,8 @@ async fn dondur(dosya: String, derece: i64, aralik: String) -> Result<Vec<String
 async fn gorsellerden_pdf(dosyalar: Vec<String>) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let yollar: Vec<PathBuf> = dosyalar.iter().map(PathBuf::from).collect();
-        let ilk = yollar.first().ok_or("Görsel yok")?;
-        let ad = if yollar.len() == 1 { govde(ilk) } else { format!("{} ve {} görsel", govde(ilk), yollar.len() - 1) };
+        let ilk = yollar.first().ok_or(dil::t("Görsel yok", "No images"))?;
+        let ad = if yollar.len() == 1 { govde(ilk) } else { dil::s(format!("{} ve {} görsel", govde(ilk), yollar.len() - 1), format!("{} and {} more", govde(ilk), yollar.len() - 1)) };
         let hedef = benzersiz(&klasoru(ilk), &ad, "pdf", &mut HashSet::new());
         pdf::gorsellerden(&yollar, &hedef)?;
         Ok(yazi(&[hedef]))
@@ -219,11 +220,11 @@ async fn gorsellerden_pdf(dosyalar: Vec<String>) -> Result<Vec<String>, String> 
 async fn pdf_gorsel(app: AppHandle, anahtar: String, dosya: String, dpi: u32, jpg: bool) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let k = PathBuf::from(&dosya);
-        let klasor = benzersiz(&klasoru(&k), &format!("{} - görseller", govde(&k)), "", &mut HashSet::new());
+        let klasor = benzersiz(&klasoru(&k), &format!("{} - {}", govde(&k), dil::t("görseller", "images")), "", &mut HashSet::new());
         let sayfalar = gorsel::pdf_gorsel(&k, &klasor, dpi.clamp(36, 600), jpg, |i, n| {
-            bildir(&app, &anahtar, "calisiyor", format!("Sayfa {i}/{n}"), vec![]);
+            bildir(&app, &anahtar, "calisiyor", dil::s(format!("Sayfa {i}/{n}"), format!("Page {i}/{n}")), vec![]);
         })?;
-        Ok(vec![klasor.to_string_lossy().into_owned(), format!("{} görsel", sayfalar.len())])
+        Ok(vec![klasor.to_string_lossy().into_owned(), dil::s(format!("{} görsel", sayfalar.len()), format!("{} images", sayfalar.len()))])
     })
     .await
 }
@@ -306,9 +307,9 @@ async fn tarama_pdf(sayfalar: Vec<TaramaSayfa>) -> Result<Vec<String>, String> {
                 Ok(pdf::JpegSayfa { veri: tarama::jpeg(&d, if gri { 80 } else { 85 }), gen: d.width(), yuk: d.height(), gri })
             })
             .collect::<Result<Vec<_>, String>>()?;
-        let hedef = benzersiz(&klasoru(&ilk), &format!("{} - tarama", govde(&ilk)), "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&klasoru(&ilk), &format!("{} - {}", govde(&ilk), dil::t("tarama", "scan")), "pdf", &mut HashSet::new());
         let n = pdf::jpeglerden(jpegler, &hedef)?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), format!("{n} sayfa")])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::s(format!("{n} sayfa"), format!("{n} pages"))])
     })
     .await
 }
@@ -332,14 +333,14 @@ fn kb(b: u64) -> String {
 #[tauri::command]
 async fn sikistir(dosya: String, seviye: u8) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "sıkıştırılmış");
+        let (k, hedef) = yanina(&dosya, dil::t("sıkıştırılmış", "compressed"));
         let (once, sonra, _) = duzen::sikistir(&k, &hedef, seviye)?;
         if sonra >= once {
             let _ = std::fs::remove_file(&hedef);
-            return Err(format!("Daha fazla küçültülemedi ({}). Dosya zaten sıkıştırılmış görünüyor.", kb(once)));
+            return Err(dil::s(format!("Daha fazla küçültülemedi ({}). Dosya zaten sıkıştırılmış görünüyor.", kb(once)), format!("Could not make it smaller ({}). The file already looks compressed.", kb(once))));
         }
         let oran = 100 - sonra * 100 / once.max(1);
-        Ok(vec![hedef.to_string_lossy().into_owned(), format!("{} → {} (%{oran} küçük)", kb(once), kb(sonra))])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::s(format!("{} → {} (%{oran} küçük)", kb(once), kb(sonra)), format!("{} → {} ({oran}% smaller)", kb(once), kb(sonra)))])
     })
     .await
 }
@@ -347,9 +348,9 @@ async fn sikistir(dosya: String, seviye: u8) -> Result<Vec<String>, String> {
 #[tauri::command]
 async fn parola_koy(dosya: String, parola: String) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "parolalı");
+        let (k, hedef) = yanina(&dosya, dil::t("parolalı", "protected"));
         duzen::parola_koy(&k, &hedef, &parola)?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), "AES-256 ile şifrelendi".into()])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::t("AES-256 ile şifrelendi", "Encrypted with AES-256").into()])
     })
     .await
 }
@@ -357,9 +358,9 @@ async fn parola_koy(dosya: String, parola: String) -> Result<Vec<String>, String
 #[tauri::command]
 async fn parola_kaldir(dosya: String, parola: String) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "parolasız");
+        let (k, hedef) = yanina(&dosya, dil::t("parolasız", "unlocked"));
         duzen::parola_kaldir(&k, &hedef, &parola)?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), "Parola kaldırıldı".into()])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::t("Parola kaldırıldı", "Password removed").into()])
     })
     .await
 }
@@ -367,9 +368,9 @@ async fn parola_kaldir(dosya: String, parola: String) -> Result<Vec<String>, Str
 #[tauri::command]
 async fn sayfa_numarasi(dosya: String, konum: String, bicim: String, baslangic: u32) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "numaralı");
+        let (k, hedef) = yanina(&dosya, dil::t("numaralı", "numbered"));
         let n = duzen::sayfa_numarasi(&k, &hedef, &konum, &bicim, baslangic.max(1), 10.5)?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), format!("{n} sayfa numaralandı")])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::s(format!("{n} sayfa numaralandı"), format!("{n} pages numbered"))])
     })
     .await
 }
@@ -377,9 +378,9 @@ async fn sayfa_numarasi(dosya: String, konum: String, bicim: String, baslangic: 
 #[tauri::command]
 async fn filigran(dosya: String, metin: String, opaklik: f32) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "filigranlı");
+        let (k, hedef) = yanina(&dosya, dil::t("filigranlı", "watermarked"));
         let n = duzen::filigran(&k, &hedef, &metin, opaklik.clamp(0.05, 0.9))?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), format!("{n} sayfa")])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::s(format!("{n} sayfa"), format!("{n} pages"))])
     })
     .await
 }
@@ -393,11 +394,16 @@ async fn dosya_oku(dosya: String) -> Result<tauri::ipc::Response, String> {
 #[tauri::command]
 async fn metin_kaydet(dosya: String, degisiklikler: Vec<duzen::MetinDegisiklik>) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, "düzenlenmiş");
+        let (k, hedef) = yanina(&dosya, dil::t("düzenlenmiş", "edited"));
         let n = duzen::metinleri_yaz(&k, &hedef, &degisiklikler)?;
-        Ok(vec![hedef.to_string_lossy().into_owned(), format!("{n} değişiklik")])
+        Ok(vec![hedef.to_string_lossy().into_owned(), dil::s(format!("{n} değişiklik"), format!("{n} changes"))])
     })
     .await
+}
+
+#[tauri::command]
+fn dil_ayarla(en: bool) {
+    dil::ayarla(en);
 }
 
 #[tauri::command]
@@ -499,6 +505,7 @@ fn main() {
             ac,
             klasorde_goster,
             office_durumu,
+            dil_ayarla,
             modeller,
             model_indir,
             model_sil

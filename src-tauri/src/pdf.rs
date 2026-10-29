@@ -1,5 +1,6 @@
 //! lopdf ile saf Rust PDF işlemleri: birleştir, böl, sayfa çıkar, döndür, görsellerden PDF.
 
+use crate::dil;
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
 use std::path::{Path, PathBuf};
 
@@ -10,10 +11,10 @@ fn hata<E: std::fmt::Display>(e: E) -> String {
 }
 
 pub fn yukle(yol: &Path) -> Sonuc<Document> {
-    let mut d = Document::load(yol).map_err(|e| format!("{} açılamadı: {e}", ad(yol)))?;
+    let mut d = Document::load(yol).map_err(|e| dil::s(format!("{} açılamadı: {e}", ad(yol)), format!("Could not open {}: {e}", ad(yol))))?;
     if d.is_encrypted() {
         // Parolasız (yalnızca izin kısıtlı) dosyalar boş parolayla açılabilir.
-        d.decrypt("").map_err(|_| format!("{} parola korumalı", ad(yol)))?;
+        d.decrypt("").map_err(|_| dil::s(format!("{} parola korumalı", ad(yol)), format!("{} is password protected", ad(yol))))?;
     }
     Ok(d)
 }
@@ -26,7 +27,7 @@ pub(crate) fn kaydet(mut d: Document, cikti: &Path) -> Sonuc<()> {
     d.prune_objects();
     d.renumber_objects();
     d.compress();
-    d.save(cikti).map(|_| ()).map_err(|e| format!("{} yazılamadı: {e}", ad(cikti)))
+    d.save(cikti).map(|_| ()).map_err(|e| dil::s(format!("{} yazılamadı: {e}", ad(cikti)), format!("Could not write {}: {e}", ad(cikti))))
 }
 
 /// Sayfaya üst düğümlerden miras kalan (sayfada olmayan) öznitelikler.
@@ -55,11 +56,11 @@ fn kok_sayfalar(d: &Document) -> Sonuc<ObjectId> {
     d.catalog()
         .and_then(|c| c.get(b"Pages"))
         .and_then(Object::as_reference)
-        .map_err(|_| "PDF'in sayfa ağacı bozuk".to_string())
+        .map_err(|_| dil::t("PDF'in sayfa ağacı bozuk", "The PDF's page tree is broken").to_string())
 }
 
 pub fn birlestir(yollar: &[PathBuf], cikti: &Path) -> Sonuc<usize> {
-    let (ilk, kalan) = yollar.split_first().ok_or("Birleştirilecek dosya yok")?;
+    let (ilk, kalan) = yollar.split_first().ok_or(dil::t("Birleştirilecek dosya yok", "Nothing to merge"))?;
     let mut hedef = yukle(ilk)?;
     let kok = kok_sayfalar(&hedef)?;
     let mut eklenen = Vec::new();
@@ -104,7 +105,7 @@ pub fn aralik_coz(metin: &str, toplam: u32) -> Sonuc<Vec<u32>> {
             if s.trim().is_empty() {
                 return Ok(bos);
             }
-            s.trim().parse::<u32>().map_err(|_| format!("'{parca}' anlaşılmadı"))
+            s.trim().parse::<u32>().map_err(|_| dil::s(format!("'{parca}' anlaşılmadı"), format!("Could not understand '{parca}'")))
         };
         let (a, b) = match parca.split_once('-') {
             Some((a, b)) => (sayi(a, 1)?, sayi(b, toplam)?),
@@ -114,7 +115,7 @@ pub fn aralik_coz(metin: &str, toplam: u32) -> Sonuc<Vec<u32>> {
             }
         };
         if a == 0 || b == 0 || a > toplam || b > toplam {
-            return Err(format!("'{parca}' 1–{toplam} aralığının dışında"));
+            return Err(dil::s(format!("'{parca}' 1–{toplam} aralığının dışında"), format!("'{parca}' is outside 1–{toplam}")));
         }
         if a <= b {
             sonuc.extend(a..=b);
@@ -123,7 +124,7 @@ pub fn aralik_coz(metin: &str, toplam: u32) -> Sonuc<Vec<u32>> {
         }
     }
     if sonuc.is_empty() {
-        return Err("Sayfa aralığı boş".into());
+        return Err(dil::t("Sayfa aralığı boş", "The page range is empty").into());
     }
     Ok(sonuc)
 }
@@ -175,7 +176,7 @@ fn sayfalari_yaz(kaynak: &Document, sayfalar: &[u32], cikti: &Path) -> Sonuc<()>
     );
     let katalog = d.add_object(dictionary! { "Type" => "Catalog", "Pages" => kok });
     d.trailer.set("Root", katalog);
-    d.save(cikti).map(|_| ()).map_err(|e| format!("{} yazılamadı: {e}", ad(cikti)))
+    d.save(cikti).map(|_| ()).map_err(|e| dil::s(format!("{} yazılamadı: {e}", ad(cikti)), format!("Could not write {}: {e}", ad(cikti))))
 }
 
 pub fn sayfa_sayisi(yol: &Path) -> Sonuc<u32> {

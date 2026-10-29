@@ -1,6 +1,7 @@
 //! Var olan sayfalara içerik ekleyen ve belgeyi yeniden yazan işlemler:
 //! sayfa numarası, filigran, metin üst katmanı, sıkıştırma, parola.
 
+use crate::dil;
 use crate::pdf::{self, Sonuc};
 use crate::yazi;
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
@@ -116,7 +117,7 @@ pub fn sayfa_numarasi(yol: &Path, cikti: &Path, konum: &str, bicim: &str, baslan
 pub fn filigran(yol: &Path, cikti: &Path, metin: &str, opaklik: f32) -> Sonuc<usize> {
     let metin = metin.trim();
     if metin.is_empty() {
-        return Err("Filigran metni boş".into());
+        return Err(dil::t("Filigran metni boş", "The watermark text is empty").into());
     }
     let mut d = pdf::yukle(yol)?;
     let sayfalar: Vec<ObjectId> = d.get_pages().into_values().collect();
@@ -310,7 +311,7 @@ fn gorsel_kucult(d: &Document, akis: &Stream, en_buyuk: u32, kalite: u8) -> Opti
 
 pub fn parola_koy(yol: &Path, cikti: &Path, parola: &str) -> Sonuc<()> {
     if parola.is_empty() {
-        return Err("Parola boş olamaz".into());
+        return Err(dil::t("Parola boş olamaz", "The password cannot be empty").into());
     }
     let mut d = pdf::yukle(yol)?;
     let anahtar = yazi::rastgele32()?;
@@ -334,13 +335,13 @@ pub fn parola_koy(yol: &Path, cikti: &Path, parola: &str) -> Sonuc<()> {
 pub fn parola_kaldir(yol: &Path, cikti: &Path, parola: &str) -> Sonuc<()> {
     let mut d = Document::load_with_password(yol, parola).map_err(|e| {
         let m = e.to_string().to_lowercase();
-        if m.contains("password") || m.contains("decrypt") { "Parola yanlış".to_string() } else { format!("Açılamadı: {e}") }
+        if m.contains("password") || m.contains("decrypt") { dil::t("Parola yanlış", "Wrong password").to_string() } else { format!("Açılamadı: {e}") }
     })?;
     if !d.was_encrypted() && !d.is_encrypted() {
-        return Err("Bu PDF'te parola yok".into());
+        return Err(dil::t("Bu PDF'te parola yok", "This PDF has no password").into());
     }
     if d.is_encrypted() {
-        d.decrypt(parola).map_err(|_| "Parola yanlış".to_string())?;
+        d.decrypt(parola).map_err(|_| dil::t("Parola yanlış", "Wrong password").to_string())?;
     }
     d.save(cikti).map(|_| ()).map_err(|e| format!("{} yazılamadı: {e}", pdf::ad(cikti)))
 }

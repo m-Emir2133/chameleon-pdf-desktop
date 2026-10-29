@@ -2,7 +2,7 @@
 //! sahibi olan projenin kendi kaynağından indirilir. Şu an hepsi DocsaidLab/DocAligner'ın
 //! (Apache-2.0) ısı haritası modelleri; aynı ön/son işlemi paylaşırlar.
 
-use image::{imageops, DynamicImage};
+use image::DynamicImage;
 use ort::{environment::Environment, session::Session, value::Tensor};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -15,6 +15,7 @@ pub struct Tanim {
     pub kimlik: &'static str,
     pub ad: &'static str,
     pub aciklama: &'static str,
+    pub aciklama_en: &'static str,
     dosya: &'static str,
     boyut: u64,
     sha256: &'static str,
@@ -27,6 +28,7 @@ pub const KATALOG: &[Tanim] = &[
         kimlik: "docaligner-sa24",
         ad: "DocAligner FastViT-SA24",
         aciklama: "En doğru; testlerde zor fotoğrafların 16/16'sı. 83 MB, ~0,1 sn",
+        aciklama_en: "Most accurate; 16/16 hard photos in tests. 83 MB, ~0.1 s",
         dosya: "docaligner-fastvit_sa24.onnx",
         boyut: 83_084_930,
         sha256: "7f9f5a8935b2eb22b3ee0245d34996063f54562df390d34714af2d76928695bc",
@@ -36,6 +38,7 @@ pub const KATALOG: &[Tanim] = &[
         kimlik: "docaligner-lcnet100",
         ad: "DocAligner LCNet100",
         aciklama: "Çok küçük ve hızlı; zor fotoğraflarda iyi, düz taramalarda daha zayıf. 5 MB",
+        aciklama_en: "Very small and fast; good on hard photos, weaker on flat scans. 5 MB",
         dosya: "docaligner-lcnet100.onnx",
         boyut: 4_767_987,
         sha256: "f4117b786e3a18470f3865c93f3c2bd69d9b998edd60f385574a5c665e79594e",
@@ -45,6 +48,7 @@ pub const KATALOG: &[Tanim] = &[
         kimlik: "docaligner-t8",
         ad: "DocAligner FastViT-T8",
         aciklama: "Orta boy; sonuçları fotoğrafa göre değişken. 13 MB",
+        aciklama_en: "Medium size; results vary from photo to photo. 13 MB",
         dosya: "docaligner-fastvit_t8.onnx",
         boyut: 13_167_814,
         sha256: "950070fd4a46e25d46db7c35d0ed77612d9063f70d4543c7c504f0da6a943a89",
@@ -90,7 +94,7 @@ pub struct Durum {
 pub fn durumlar() -> Vec<Durum> {
     KATALOG
         .iter()
-        .map(|t| Durum { kimlik: t.kimlik, ad: t.ad, aciklama: t.aciklama, mb: t.boyut as f32 / 1_048_576.0, indirildi: bul(t).is_some() })
+        .map(|t| Durum { kimlik: t.kimlik, ad: t.ad, aciklama: if crate::dil::en() { t.aciklama_en } else { t.aciklama }, mb: t.boyut as f32 / 1_000_000.0, indirildi: bul(t).is_some() })
         .collect()
 }
 
@@ -104,14 +108,14 @@ pub fn indir(kimlik: &str, ilerle: impl Fn(u64, u64)) -> Result<(), String> {
     std::fs::create_dir_all(&klasor).map_err(|e| e.to_string())?;
     let gecici = klasor.join(format!("{}.indiriliyor", t.dosya));
     let url = format!("https://drive.usercontent.google.com/download?id={}&export=download&confirm=t", t.drive_id);
-    let yanit = ureq::get(&url).call().map_err(|e| format!("İndirilemedi: {e}"))?;
+    let yanit = ureq::get(&url).call().map_err(|e| crate::dil::s(format!("İndirilemedi: {e}"), format!("Download failed: {e}")))?;
     let mut okuyucu = yanit.into_reader();
     let mut dosya = std::fs::File::create(&gecici).map_err(|e| e.to_string())?;
     let mut ozet = Sha256::new();
     let mut tampon = vec![0u8; 256 * 1024];
     let (mut inen, mut son_bildirim) = (0u64, 0u64);
     loop {
-        let n = okuyucu.read(&mut tampon).map_err(|e| format!("İndirme kesildi: {e}"))?;
+        let n = okuyucu.read(&mut tampon).map_err(|e| crate::dil::s(format!("İndirme kesildi: {e}"), format!("Download interrupted: {e}")))?;
         if n == 0 {
             break;
         }
@@ -127,7 +131,7 @@ pub fn indir(kimlik: &str, ilerle: impl Fn(u64, u64)) -> Result<(), String> {
     let hex: String = ozet.finalize().iter().map(|b| format!("{b:02x}")).collect();
     if inen != t.boyut || hex != t.sha256 {
         let _ = std::fs::remove_file(&gecici);
-        return Err(format!("İndirilen dosya beklenen model değil ({} bayt). Kaynak değişmiş olabilir.", inen));
+        return Err(crate::dil::s(format!("İndirilen dosya beklenen model değil ({} bayt). Kaynak değişmiş olabilir.", inen), format!("The downloaded file is not the expected model ({} bytes). The source may have changed.", inen)));
     }
     std::fs::rename(&gecici, klasor.join(t.dosya)).map_err(|e| e.to_string())?;
     ilerle(t.boyut, t.boyut);
@@ -171,17 +175,7 @@ pub fn var_mi(kimlik: &str) -> bool {
 /// Dört köşe (sol üst, sağ üst, sağ alt, sol alt; 0..1). Model indirilmemişse ya da bir köşe bulunamazsa None.
 pub fn koseler(img: &DynamicImage, kimlik: &str) -> Option<[[f32; 2]; 4]> {
     let o = oturum(kimlik)?;
-    // infer.py: en-boy korunmadan 256x256'ya, BGR, /255, NCHW.
-    let k = imageops::resize(&img.to_rgb8(), GIRDI, GIRDI, imageops::FilterType::Triangle);
-    let alan = (GIRDI * GIRDI) as usize;
-    let mut veri = vec![0f32; 3 * alan];
-    for (x, y, p) in k.enumerate_pixels() {
-        let i = (y * GIRDI + x) as usize;
-        for c in 0..3 {
-            veri[c * alan + i] = p[2 - c] as f32 / 255.0;
-        }
-    }
-    let girdi = Tensor::from_array(([1usize, 3, GIRDI as usize, GIRDI as usize], veri)).ok()?;
+    let girdi = Tensor::from_array(([1usize, 3, GIRDI as usize, GIRDI as usize], girdi_hazirla(img))).ok()?;
     let mut oturum = o.lock().ok()?;
     let cikti = oturum.run(ort::inputs!["img" => girdi]).ok()?;
     let (_, isi) = cikti["heatmap"].try_extract_tensor::<f32>().ok()?;
@@ -201,17 +195,47 @@ pub fn koseler(img: &DynamicImage, kimlik: &str) -> Option<[[f32; 2]; 4]> {
     Some(std::array::from_fn(|i| bulunan[i].unwrap_or(KENAR[i])))
 }
 
+/// infer.py'deki gibi: en-boy korunmadan 256x256, BGR, /255, NCHW. Küçültme OpenCV'nin
+/// INTER_LINEAR'ı gibi yapılır (yumuşatmasız iki doğrusal örnekleme). Model bununla eğitildiği için
+/// yumuşatan bir filtre (Triangle) bazı fotoğraflarda köşe haritasını belirgin biçimde değiştiriyordu.
+fn girdi_hazirla(img: &DynamicImage) -> Vec<f32> {
+    let rgb = img.to_rgb8();
+    let (w, h) = (rgb.width() as f32, rgb.height() as f32);
+    let (sx, sy) = (w / GIRDI as f32, h / GIRDI as f32);
+    let alan = (GIRDI * GIRDI) as usize;
+    let mut veri = vec![0f32; 3 * alan];
+    let al = |x: u32, y: u32| rgb.get_pixel(x.min(rgb.width() - 1), y.min(rgb.height() - 1));
+    for oy in 0..GIRDI {
+        let fy = ((oy as f32 + 0.5) * sy - 0.5).max(0.0);
+        let (y0, ty) = (fy.floor() as u32, fy.fract());
+        for ox in 0..GIRDI {
+            let fx = ((ox as f32 + 0.5) * sx - 0.5).max(0.0);
+            let (x0, tx) = (fx.floor() as u32, fx.fract());
+            let (a, b, c, d) = (al(x0, y0), al(x0 + 1, y0), al(x0, y0 + 1), al(x0 + 1, y0 + 1));
+            let i = (oy * GIRDI + ox) as usize;
+            for k in 0..3 {
+                let v = (a[k] as f32 * (1.0 - tx) + b[k] as f32 * tx) * (1.0 - ty) + (c[k] as f32 * (1.0 - tx) + d[k] as f32 * tx) * ty;
+                // BGR sırası: kanal 0 = mavi.
+                veri[(2 - k) * alan + i] = v.round() / 255.0;
+            }
+        }
+    }
+    veri
+}
+
 /// Eşiğin altında kalan zayıf ama belirgin bir köşe: en yüksek değer 0,08'i geçiyorsa onun yeri.
 fn tepe(harita: &[f32]) -> Option<[f32; 2]> {
     let (i, en) = harita.iter().enumerate().fold((0, 0f32), |a, (i, &v)| if v > a.1 { (i, v) } else { a });
     (en >= 0.08).then(|| [((i % HARITA) as f32 + 0.5) / HARITA as f32, ((i / HARITA) as f32 + 0.5) / HARITA as f32])
 }
 
-/// Eşiği aşan en büyük bağlı bölgenin (8 komşulu) değerle ağırlıklı merkezi, 0..1 aralığında.
+/// Eşiği aşan bağlı bölgelerden (8 komşulu) tepe değeri en yüksek olanın, değerle ağırlıklı merkezi
+/// (0..1). DocAligner en büyük alanlı bölgeyi seçer; gölgeli fotoğraflarda yanlış yerde daha geniş
+/// ama daha zayıf bir bölge çıkabildiği için burada tepe değeri esas alınır.
 fn merkez(harita: &[f32]) -> Option<[f32; 2]> {
     let n = HARITA;
     let mut etiket = vec![0u32; n * n];
-    let mut en_iyi: Option<(usize, f32, f32, f32)> = None; // (alan, Σv·x, Σv·y, Σv)
+    let mut en_iyi: Option<(f32, f32, f32, f32)> = None; // (tepe, Σv·x, Σv·y, Σv)
     let mut sira = 0;
     let mut yigin = Vec::new();
     for bas in 0..n * n {
@@ -221,11 +245,11 @@ fn merkez(harita: &[f32]) -> Option<[f32; 2]> {
         sira += 1;
         etiket[bas] = sira;
         yigin.push(bas);
-        let (mut alan, mut sx, mut sy, mut sv) = (0usize, 0f32, 0f32, 0f32);
+        let (mut tepe, mut sx, mut sy, mut sv) = (0f32, 0f32, 0f32, 0f32);
         while let Some(i) = yigin.pop() {
             let (x, y) = (i % n, i / n);
             let v = harita[i];
-            alan += 1;
+            tepe = tepe.max(v);
             sx += v * (x as f32 + 0.5);
             sy += v * (y as f32 + 0.5);
             sv += v;
@@ -243,8 +267,8 @@ fn merkez(harita: &[f32]) -> Option<[f32; 2]> {
                 }
             }
         }
-        if en_iyi.is_none_or(|e| alan > e.0) {
-            en_iyi = Some((alan, sx, sy, sv));
+        if en_iyi.is_none_or(|e| tepe > e.0) {
+            en_iyi = Some((tepe, sx, sy, sv));
         }
     }
     let (_, sx, sy, sv) = en_iyi?;

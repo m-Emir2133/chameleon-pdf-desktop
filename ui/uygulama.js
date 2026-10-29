@@ -8,7 +8,7 @@ const OFFICE = ['pptx', 'ppt', 'pptm', 'ppsx', 'pps', 'potx', 'odp', 'docx', 'do
 const PDF = ['pdf'];
 const GORSEL = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'tif', 'tiff'];
 
-const ikon = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
+const ikon = (yol) => `<svg viewBox="0 0 24 24">${yol}</svg>`;
 const IKON = {
   tara: ikon('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="m8 7 8 1-1 9-8-1z"/>'),
   office: ikon('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h4"/>'),
@@ -59,10 +59,11 @@ const ARACLAR = [
   { id: 'parola', grup: 'Güvenlik', ad: 'Parola', ikon: IKON.parola, kabul: PDF,
     aciklama: 'PDF\'e AES-256 parola koyar ya da bildiğin parolayı kaldırır.', birakAlt: 'Önce parolayı yaz, sonra PDF bırak', otomatik: true },
 ];
+for (const a of ARACLAR) for (const k of ['grup', 'ad', 'aciklama', 'birakAlt', 'buton']) if (a[k]) a[k] = d(a[k]);
 
 const ayar = {
   bolAdim: 1, aralik: '', derece: 90, donAralik: '', dpi: 150, jpg: false, taraFiltre: 'tarama', taraModel: 'klasik',
-  seviye: 2, parolaKip: 'koy', konum: 'alt-orta', bicim: '{n} / {N}', baslangic: 1, filigranMetin: 'GİZLİ', opaklik: 0.25,
+  seviye: 2, parolaKip: 'koy', konum: 'alt-orta', bicim: '{n} / {N}', baslangic: 1, filigranMetin: DIL === 'en' ? 'CONFIDENTIAL' : 'GİZLİ', opaklik: 0.25,
 };
 // Parola diske yazılmaz; yalnızca bu oturumda bellekte durur.
 let parola = '';
@@ -107,39 +108,39 @@ function aracSec(a) {
 // ---------- Seçenekler ----------
 function parcali(ad, secenekler, deger) {
   return `<span class="parcali" data-ad="${ad}">${secenekler
-    .map(([v, e]) => `<button data-v="${v}" class="${String(v) === String(deger) ? 'secili' : ''}">${e}</button>`)
+    .map(([v, e]) => `<button data-v="${v}" class="${String(v) === String(deger) ? 'secili' : ''}">${d(e)}</button>`)
     .join('')}</span>`;
 }
 
 function seceneklerCiz() {
   const s = $('#secenekler');
   if (arac.id === 'bol') {
-    s.innerHTML = `<label class="secenek">Her <input type="number" min="1" id="bolAdim" value="${ayar.bolAdim}"> sayfada bir dosya</label>`;
+    s.innerHTML = `<label class="secenek">${d('Her')} <input type="number" min="1" id="bolAdim" value="${ayar.bolAdim}"> ${d('sayfada bir dosya')}</label>`;
   } else if (arac.id === 'cikar') {
-    s.innerHTML = `<label class="secenek">Sayfalar <input type="text" id="aralik" placeholder="örn. 1-3, 5, 8-" value="${kacis(ayar.aralik)}"></label>`;
+    s.innerHTML = `<label class="secenek">${d('Sayfalar')} <input type="text" id="aralik" placeholder="${d('örn. 1-3, 5, 8-')}" value="${kacis(ayar.aralik)}"></label>`;
   } else if (arac.id === 'dondur') {
-    s.innerHTML = `<span class="secenek">Yön ${parcali('derece', [[90, '↻ Sağa 90°'], [180, '180°'], [270, '↺ Sola 90°']], ayar.derece)}</span>
-      <label class="secenek">Sayfalar <input type="text" id="donAralik" placeholder="boş = hepsi" value="${kacis(ayar.donAralik)}"></label>`;
+    s.innerHTML = `<span class="secenek">${d('Yön')} ${parcali('derece', [[90, '↻ Sağa 90°'], [180, '180°'], [270, '↺ Sola 90°']], ayar.derece)}</span>
+      <label class="secenek">${d('Sayfalar')} <input type="text" id="donAralik" placeholder="${d('boş = hepsi')}" value="${kacis(ayar.donAralik)}"></label>`;
   } else if (arac.id === 'tara') {
-    s.innerHTML = `<span class="secenek">Görünüm ${parcali('taraFiltre', FILTRELER, ayar.taraFiltre)}</span>
-      <label class="secenek">Köşe bulucu <select id="taraModel">${modelSecenekleri()}</select></label>
+    s.innerHTML = `<span class="secenek">${d('Görünüm')} ${parcali('taraFiltre', FILTRELER, ayar.taraFiltre)}</span>
+      <label class="secenek">${d('Köşe bulucu')} <select id="taraModel">${modelSecenekleri()}</select></label>
       <span class="secenek" id="model-eylem">${modelEylemi()}</span>
       <span class="ipucu model-not">${modelNotu()}</span>`;
   } else if (arac.id === 'sikistir') {
-    s.innerHTML = `<span class="secenek">Seviye ${parcali('seviye', [[1, 'Hafif'], [2, 'Orta'], [3, 'Güçlü']], ayar.seviye)}</span>`;
+    s.innerHTML = `<span class="secenek">${d('Seviye')} ${parcali('seviye', [[1, 'Hafif'], [2, 'Orta'], [3, 'Güçlü']], ayar.seviye)}</span>`;
   } else if (arac.id === 'parola') {
     s.innerHTML = `<span class="secenek">${parcali('parolaKip', [['koy', 'Parola koy'], ['kaldir', 'Parolayı kaldır']], ayar.parolaKip)}</span>
-      <label class="secenek">Parola <input type="password" id="parola" autocomplete="off" value="${kacis(parola)}"></label>`;
+      <label class="secenek">${d('Parola')} <input type="password" id="parola" autocomplete="off" value="${kacis(parola)}"></label>`;
   } else if (arac.id === 'sayfaNo') {
-    s.innerHTML = `<span class="secenek">Konum ${parcali('konum', [['alt-orta', 'Alt orta'], ['alt-sag', 'Alt sağ'], ['ust-sag', 'Üst sağ']], ayar.konum)}</span>
-      <span class="secenek">Biçim ${parcali('bicim', [['{n}', '1'], ['{n} / {N}', '1 / 10'], ['Sayfa {n}', 'Sayfa 1']], ayar.bicim)}</span>
-      <label class="secenek">Başlangıç <input type="number" min="1" id="baslangic" value="${ayar.baslangic}"></label>`;
+    s.innerHTML = `<span class="secenek">${d('Konum')} ${parcali('konum', [['alt-orta', 'Alt orta'], ['alt-sag', 'Alt sağ'], ['ust-sag', 'Üst sağ']], ayar.konum)}</span>
+      <span class="secenek">${d('Biçim')} ${parcali('bicim', [['{n}', '1'], ['{n} / {N}', '1 / 10'], [DIL === 'en' ? 'Page {n}' : 'Sayfa {n}', 'Sayfa 1']], ayar.bicim)}</span>
+      <label class="secenek">${d('Başlangıç')} <input type="number" min="1" id="baslangic" value="${ayar.baslangic}"></label>`;
   } else if (arac.id === 'filigran') {
-    s.innerHTML = `<label class="secenek">Metin <input type="text" id="filigranMetin" value="${kacis(ayar.filigranMetin)}"></label>
-      <span class="secenek">Belirginlik ${parcali('opaklik', [[0.12, 'Hafif'], [0.25, 'Orta'], [0.45, 'Belirgin']], ayar.opaklik)}</span>`;
+    s.innerHTML = `<label class="secenek">${d('Metin')} <input type="text" id="filigranMetin" value="${kacis(ayar.filigranMetin)}"></label>
+      <span class="secenek">${d('Belirginlik')} ${parcali('opaklik', [[0.12, 'Hafif'], [0.25, 'Orta'], [0.45, 'Belirgin']], ayar.opaklik)}</span>`;
   } else if (arac.id === 'pdfGorsel') {
-    s.innerHTML = `<span class="secenek">Kalite ${parcali('dpi', [[96, 'Ekran'], [150, 'Normal'], [300, 'Baskı']], ayar.dpi)}</span>
-      <span class="secenek">Biçim ${parcali('jpg', [[false, 'PNG'], [true, 'JPG']], ayar.jpg)}</span>`;
+    s.innerHTML = `<span class="secenek">${d('Kalite')} ${parcali('dpi', [[96, 'Ekran'], [150, 'Normal'], [300, 'Baskı']], ayar.dpi)}</span>
+      <span class="secenek">${d('Biçim')} ${parcali('jpg', [[false, 'PNG'], [true, 'JPG']], ayar.jpg)}</span>`;
   } else {
     s.innerHTML = '';
   }
@@ -173,16 +174,16 @@ function listeCiz() {
   $('#birak').classList.toggle('ince', !!arac.liste && liste.length > 0);
   if (!arac.liste || liste.length === 0) { alan.hidden = true; return; }
   alan.hidden = false;
-  $('#liste-sayac').textContent = `${liste.length} dosya`;
+  $('#liste-sayac').textContent = d('{n} dosya', { n: liste.length });
   $('#baslat').textContent = arac.buton;
-  $('#liste').innerHTML = liste.map((d, i) => `
+  $('#liste').innerHTML = liste.map((o, i) => `
     <li>
       <span class="sira">${i + 1}</span>
-      <span class="ad" title="${kacis(d.yol)}">${kacis(ad(d.yol))}</span>
-      <span class="bilgi">${d.sayfa != null ? `${d.sayfa} sayfa` : ''}</span>
-      <button class="kucuk" data-i="${i}" data-e="yukari" ${i === 0 ? 'disabled' : ''} title="Yukarı">▲</button>
-      <button class="kucuk" data-i="${i}" data-e="asagi" ${i === liste.length - 1 ? 'disabled' : ''} title="Aşağı">▼</button>
-      <button class="kucuk" data-i="${i}" data-e="sil" title="Listeden çıkar">✕</button>
+      <span class="ad" title="${kacis(o.yol)}">${kacis(ad(o.yol))}</span>
+      <span class="bilgi">${o.sayfa != null ? d('{n} sayfa', { n: o.sayfa }) : ''}</span>
+      <button class="kucuk" data-i="${i}" data-e="yukari" ${i === 0 ? 'disabled' : ''} title="${d('Yukarı')}">▲</button>
+      <button class="kucuk" data-i="${i}" data-e="asagi" ${i === liste.length - 1 ? 'disabled' : ''} title="${d('Aşağı')}">▼</button>
+      <button class="kucuk" data-i="${i}" data-e="sil" title="${d('Listeden çıkar')}">✕</button>
     </li>`).join('');
   baslatDurumu();
 }
@@ -223,7 +224,7 @@ function isEkle(anahtar, baslik, ileti) {
     $('#isler').prepend(li);
   }
   li.dataset.baslik = baslik;
-  isGuncelle(anahtar, 'calisiyor', ileti || 'Hazırlanıyor…', []);
+  isGuncelle(anahtar, 'calisiyor', ileti || d('Hazırlanıyor…'), []);
   return anahtar;
 }
 
@@ -234,8 +235,8 @@ function isGuncelle(anahtar, durum, ileti, ciktilar) {
   const ilk = ciktilar && ciktilar[0];
   let eylem = '';
   if (durum === 'tamam' && ilk) {
-    eylem = `<button class="eylem" data-ac="${kacis(ilk)}">Aç</button>
-             <button class="eylem" data-goster="${kacis(ilk)}">Klasörde göster</button>`;
+    eylem = `<button class="eylem" data-ac="${kacis(ilk)}">${d('Aç')}</button>
+             <button class="eylem" data-goster="${kacis(ilk)}">${d('Klasörde göster')}</button>`;
   }
   const alt = durum === 'tamam' && ilk ? `${ad(ilk)}${ciktilar[1] ? ` · ${ciktilar[1]}` : ''}` : ileti;
   li.innerHTML = `
@@ -252,7 +253,7 @@ $('#isler').addEventListener('click', (e) => {
 $('#isleri-temizle').addEventListener('click', () => {
   for (const [k, li] of isler) if (!li.classList.contains('calisiyor')) { li.remove(); isler.delete(k); }
   if (isler.size === 0) {
-    $('#isler').innerHTML = '<li class="bos">Henüz işlem yok. Bıraktığın dosyalar kaynakla aynı klasöre kaydedilir.</li>';
+    $('#isler').innerHTML = `<li class="bos">${d('Henüz işlem yok. Bıraktığın dosyalar kaynakla aynı klasöre kaydedilir.')}</li>`;
     $('#isleri-temizle').hidden = true;
   }
 });
@@ -278,13 +279,13 @@ async function dosyalarGeldi(yollar) {
 
   // Office dosyaları hangi araçta bırakılırsa bırakılsın PDF'e çevrilir.
   if (office.length) {
-    for (const y of office) isEkle(y, ad(y), 'Sırada…');
+    for (const y of office) isEkle(y, ad(y), d('Sırada…'));
     invoke('office', { dosyalar: office }).catch((h) => office.forEach((y) => isGuncelle(y, 'hata', String(h), [])));
   }
   for (const y of diger) {
     const anahtar = `is-${++isSayac}`;
     isEkle(anahtar, ad(y), '');
-    isGuncelle(anahtar, 'hata', `${arac.ad} bu dosya türünü almıyor (${arac.kabul.slice(0, 4).join(', ')}…)`, []);
+    isGuncelle(anahtar, 'hata', d('{arac} bu dosya türünü almıyor ({tur}…)', { arac: arac.ad, tur: arac.kabul.slice(0, 4).join(', ') }), []);
   }
   if (!uygun.length) return;
 
@@ -292,13 +293,13 @@ async function dosyalarGeldi(yollar) {
   if (arac.id === 'metin') { mdAc(uygun[0]); return; }
 
   if (arac.liste) {
-    const yeni = uygun.filter((y) => !liste.some((d) => d.yol === y)).map((yol) => ({ yol }));
+    const yeni = uygun.filter((y) => !liste.some((o) => o.yol === y)).map((yol) => ({ yol }));
     liste.push(...(arac.id === 'cikar' ? yeni.slice(0, 1) : yeni));
     if (arac.id === 'cikar') liste = liste.slice(-1);
     listeCiz();
     if (arac.kabul === PDF) {
-      for (const d of liste.filter((d) => d.sayfa == null)) {
-        invoke('sayfa_sayisi', { dosya: d.yol }).then((n) => { d.sayfa = n; listeCiz(); }).catch(() => {});
+      for (const o of liste.filter((o) => o.sayfa == null)) {
+        invoke('sayfa_sayisi', { dosya: o.yol }).then((n) => { o.sayfa = n; listeCiz(); }).catch(() => {});
       }
     }
     if (arac.id === 'cikar') $('#aralik')?.focus();
@@ -307,36 +308,36 @@ async function dosyalarGeldi(yollar) {
 
   for (const y of uygun) {
     if (arac.id === 'bol') {
-      calistir(ad(y), 'Bölünüyor…', () => invoke('bol', { dosya: y, adim: ayar.bolAdim }));
+      calistir(ad(y), d('Bölünüyor…'), () => invoke('bol', { dosya: y, adim: ayar.bolAdim }));
     } else if (arac.id === 'dondur') {
-      calistir(ad(y), 'Döndürülüyor…', () => invoke('dondur', { dosya: y, derece: ayar.derece, aralik: ayar.donAralik }));
+      calistir(ad(y), d('Döndürülüyor…'), () => invoke('dondur', { dosya: y, derece: ayar.derece, aralik: ayar.donAralik }));
     } else if (arac.id === 'pdfGorsel') {
-      calistir(ad(y), 'Sayfalar çiziliyor…', (anahtar) => invoke('pdf_gorsel', { anahtar, dosya: y, dpi: ayar.dpi, jpg: ayar.jpg }));
+      calistir(ad(y), d('Sayfalar çiziliyor…'), (anahtar) => invoke('pdf_gorsel', { anahtar, dosya: y, dpi: ayar.dpi, jpg: ayar.jpg }));
     } else if (arac.id === 'sikistir') {
-      calistir(ad(y), 'Görseller küçültülüyor…', () => invoke('sikistir', { dosya: y, seviye: ayar.seviye }));
+      calistir(ad(y), d('Görseller küçültülüyor…'), () => invoke('sikistir', { dosya: y, seviye: ayar.seviye }));
     } else if (arac.id === 'parola') {
       const komut = ayar.parolaKip === 'koy' ? 'parola_koy' : 'parola_kaldir';
-      calistir(ad(y), ayar.parolaKip === 'koy' ? 'Şifreleniyor…' : 'Parola kaldırılıyor…', async () => {
-        if (!parola) throw 'Önce yukarıya parolayı yaz';
+      calistir(ad(y), d(ayar.parolaKip === 'koy' ? 'Şifreleniyor…' : 'Parola kaldırılıyor…'), async () => {
+        if (!parola) throw d('Önce yukarıya parolayı yaz');
         return invoke(komut, { dosya: y, parola });
       });
     } else if (arac.id === 'sayfaNo') {
-      calistir(ad(y), 'Numaralanıyor…', () => invoke('sayfa_numarasi', { dosya: y, konum: ayar.konum, bicim: ayar.bicim, baslangic: ayar.baslangic }));
+      calistir(ad(y), d('Numaralanıyor…'), () => invoke('sayfa_numarasi', { dosya: y, konum: ayar.konum, bicim: ayar.bicim, baslangic: ayar.baslangic }));
     } else if (arac.id === 'filigran') {
-      calistir(ad(y), 'Filigran ekleniyor…', () => invoke('filigran', { dosya: y, metin: ayar.filigranMetin, opaklik: ayar.opaklik }));
+      calistir(ad(y), d('Filigran ekleniyor…'), () => invoke('filigran', { dosya: y, metin: ayar.filigranMetin, opaklik: ayar.opaklik }));
     }
   }
 }
 
 function listeyiCalistir() {
-  const yollar = liste.map((d) => d.yol);
+  const yollar = liste.map((o) => o.yol);
   if (!yollar.length) return;
   if (arac.id === 'birlestir') {
-    calistir(`${yollar.length} PDF birleştiriliyor`, 'Birleştiriliyor…', () => invoke('birlestir', { dosyalar: yollar }));
+    calistir(d('{n} PDF birleştiriliyor', { n: yollar.length }), d('Birleştiriliyor…'), () => invoke('birlestir', { dosyalar: yollar }));
   } else if (arac.id === 'gorselPdf') {
-    calistir(`${yollar.length} görsel → PDF`, 'Oluşturuluyor…', () => invoke('gorsellerden_pdf', { dosyalar: yollar }));
+    calistir(d('{n} görsel → PDF', { n: yollar.length }), d('Oluşturuluyor…'), () => invoke('gorsellerden_pdf', { dosyalar: yollar }));
   } else if (arac.id === 'cikar') {
-    calistir(ad(yollar[0]), `Sayfa ${ayar.aralik} çıkarılıyor…`, () => invoke('sayfa_cikar', { dosya: yollar[0], aralik: ayar.aralik }));
+    calistir(ad(yollar[0]), d('Sayfa {a} çıkarılıyor…', { a: ayar.aralik }), () => invoke('sayfa_cikar', { dosya: yollar[0], aralik: ayar.aralik }));
   }
   liste = [];
   listeCiz();
@@ -358,7 +359,7 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
   const perde = $('#perde');
   if (payload.type === 'enter' || payload.type === 'over') {
     perde.hidden = false;
-    $('#perde-alt').textContent = arac.id === 'office' ? 'PDF\'e çevrilecek' : arac.ad;
+    $('#perde-alt').textContent = arac.id === 'office' ? d("PDF'e çevrilecek") : arac.ad;
   } else {
     perde.hidden = true;
     if (payload.type === 'drop' && payload.paths?.length) dosyalarGeldi(payload.paths);
@@ -368,9 +369,9 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
 // Office kurulu değilse yan çubukta söyle.
 invoke('office_durumu').then((var_) => {
   const not = $('#office-notu');
-  if (var_.length === 3) not.textContent = 'Office: PowerPoint, Word, Excel hazır';
-  else if (var_.length === 0) { not.textContent = 'Office bulunamadı — PDF\'e çevirme çalışmaz'; not.classList.add('uyari'); }
-  else { not.textContent = `Office: yalnızca ${var_.join(', ')}`; not.classList.add('uyari'); }
+  if (var_.length === 3) not.textContent = d('Office: hazır');
+  else if (var_.length === 0) { not.textContent = d("Office bulunamadı — PDF'e çevirme çalışmaz"); not.classList.add('uyari'); }
+  else { not.textContent = d('Office: yalnızca {x}', { x: var_.join(', ') }); not.classList.add('uyari'); }
   const s = document.createElement('div');
   s.id = 'model-notu';
   not.appendChild(s);
@@ -393,9 +394,9 @@ const seciliModel = () => modelListesi.find((m) => m.kimlik === ayar.taraModel);
 const kullanilacakModel = () => (seciliModel()?.indirildi ? ayar.taraModel : 'klasik');
 
 function modelSecenekleri() {
-  const s = [`<option value="klasik" ${ayar.taraModel === 'klasik' ? 'selected' : ''}>Klasik (model yok)</option>`];
+  const s = [`<option value="klasik" ${ayar.taraModel === 'klasik' ? 'selected' : ''}>${d('Klasik (model yok)')}</option>`];
   for (const m of modelListesi) {
-    s.push(`<option value="${m.kimlik}" ${m.kimlik === ayar.taraModel ? 'selected' : ''}>${kacis(m.ad)}${m.indirildi ? '' : ` — ${Math.round(m.mb)} MB indirilecek`}</option>`);
+    s.push(`<option value="${m.kimlik}" ${m.kimlik === ayar.taraModel ? 'selected' : ''}>${kacis(m.ad)}${m.indirildi ? '' : ` · ${Math.round(m.mb)} MB`}</option>`);
   }
   return s.join('');
 }
@@ -403,22 +404,22 @@ function modelSecenekleri() {
 function modelEylemi() {
   const m = seciliModel();
   if (!m) return '';
-  if (indirilen.has(m.kimlik)) return `<span class="ipucu">İndiriliyor… %${indirilen.get(m.kimlik)}</span>`;
-  if (!m.indirildi) return `<button class="ikincil kucuk-dugme" data-model-indir="${m.kimlik}">İndir (${Math.round(m.mb)} MB)</button>`;
-  return `<span class="ipucu">Hazır</span> <button class="metin" data-model-sil="${m.kimlik}">Sil</button>`;
+  if (indirilen.has(m.kimlik)) return `<span class="ipucu">${d('İndiriliyor… %{p}', { p: indirilen.get(m.kimlik) })}</span>`;
+  if (!m.indirildi) return `<button class="ikincil kucuk-dugme" data-model-indir="${m.kimlik}">${d('İndir ({mb} MB)', { mb: Math.round(m.mb) })}</button>`;
+  return `<span class="ipucu">${d('Hazır')}</span> <button class="metin" data-model-sil="${m.kimlik}">${d('Sil')}</button>`;
 }
 
 function modelNotu() {
   const m = seciliModel();
-  if (!m) return 'Model gerektirmez; dağınık zeminde ve gölgede yanılabilir.';
-  return `${kacis(m.aciklama)}. DocsaidLab/DocAligner projesinden, kendi kaynağından indirilir (kod Apache-2.0). Doğruluğu ve lisansı modelin sahibine aittir.`;
+  if (!m) return d('Model gerektirmez; dağınık zeminde ve gölgede yanılabilir.');
+  return d('{a}. DocsaidLab/DocAligner projesinden, kendi kaynağından indirilir (kod Apache-2.0). Doğruluğu ve lisansı modelin sahibine aittir.', { a: kacis(m.aciklama) });
 }
 
 function modelArayuzuGuncelle() {
   const m = seciliModel();
   const not = $('#model-notu');
   if (not) {
-    not.textContent = m?.indirildi ? `Köşe bulucu: ${m.ad}` : 'Köşe bulucu: klasik';
+    not.textContent = m?.indirildi ? d('Köşe bulucu: {a}', { a: m.ad }) : d('Köşe bulucu: klasik');
     not.className = m && !m.indirildi ? 'uyari' : '';
   }
   if (arac.id === 'tara') seceneklerCiz();
@@ -459,7 +460,7 @@ $('#secenekler').addEventListener('click', async (e) => {
       indirilen.delete(indir);
       modelArayuzuGuncelle();
       const anahtar = `is-${++isSayac}`;
-      isEkle(anahtar, 'Model indirme', '');
+      isEkle(anahtar, d('Model indirme'), '');
       isGuncelle(anahtar, 'hata', String(h), []);
     }
   } else if (sil) {
@@ -511,16 +512,16 @@ function kartIcerik(s, i) {
     : s.onizleme ? `<img src="${s.onizleme}" alt="">` : '<span class="bekle"></span>';
   return `<span class="no">${i + 1}</span>${govde}
     <span class="kart-eylem">
-      <button data-e="duzenle" title="Köşeleri ayarla">⌗</button>
-      <button data-e="dondur" title="Sağa döndür">↻</button>
-      <button data-e="sil" title="Çıkar">✕</button>
+      <button data-e="duzenle" title="${d('Köşeleri ayarla')}">⌗</button>
+      <button data-e="dondur" title="${d('Sağa döndür')}">↻</button>
+      <button data-e="sil" title="${d('Çıkar')}">✕</button>
     </span>`;
 }
 
 function kartlariCiz() {
   const kutu = $('#kartlar');
   kutu.innerHTML = sayfalar.map((s, i) => `<div class="kart" data-id="${s.id}" title="${kacis(ad(s.dosya))}">${kartIcerik(s, i)}</div>`).join('');
-  $('#tarama-sayac').textContent = sayfalar.length ? `${sayfalar.length} sayfa` : '';
+  $('#tarama-sayac').textContent = sayfalar.length ? d('{n} sayfa', { n: sayfalar.length }) : '';
   $('#tarama-pdf').disabled = !sayfalar.length;
   $('#birak').classList.toggle('ince', arac.id === 'tara' && sayfalar.length > 0);
 }
@@ -600,7 +601,7 @@ $('#tarama-temizle').addEventListener('click', () => { sayfalar.length = 0; kart
 $('#tarama-pdf').addEventListener('click', () => {
   const hazir = sayfalar.filter((s) => s.kose && !s.hata);
   if (!hazir.length) return;
-  calistir(`${hazir.length} sayfalık tarama`, 'Sayfalar düzeltiliyor…', () => invoke('tarama_pdf', { sayfalar: hazir.map(taramaVerisi) }));
+  calistir(d('{n} sayfalık tarama', { n: hazir.length }), d('Sayfalar düzeltiliyor…'), () => invoke('tarama_pdf', { sayfalar: hazir.map(taramaVerisi) }));
 });
 
 // ---------- Köşe düzenleyici ----------
@@ -747,7 +748,7 @@ async function mdAc(dosya) {
   } catch (h) {
     const anahtar = `is-${++isSayac}`;
     isEkle(anahtar, ad(dosya), '');
-    isGuncelle(anahtar, 'hata', `Açılamadı: ${h?.message || h}`, []);
+    isGuncelle(anahtar, 'hata', d('Açılamadı: {h}', { h: h?.message || h }), []);
   }
 }
 
@@ -784,11 +785,38 @@ async function mdCizBir() {
   $('#md-sayfa').style.height = `${vp.height}px`;
   await sayfa.render({ canvasContext: tuval.getContext('2d', { willReadFrequently: true }), viewport: sayfa.getViewport({ scale: md.olcek * dpr }) }).promise;
   const icerik = await sayfa.getTextContent();
-  Object.assign(md, { sayfa, vp, ogeler: icerik.items });
+  Object.assign(md, { sayfa, vp, ogeler: satirlaraBirlestir(icerik.items) });
   $('#md-no').textContent = `${md.no + 1} / ${md.belge.numPages}`;
   $('#md-onceki').disabled = md.no === 0;
   $('#md-sonraki').disabled = md.no >= md.belge.numPages - 1;
   mdKatmanCiz();
+}
+
+/// pdf.js bir satırı çoğu zaman birkaç parça verir ("Monthly Report — " + "Neighbourhood Library").
+/// Kullanıcı bir yere tıklayınca bütün satırı değiştirmek ister; aynı taban çizgisinde, aynı boyutta
+/// ve aralarında küçük boşluk olan parçalar tek öğe olarak birleştirilir.
+function satirlaraBirlestir(ogeler) {
+  const sonuc = [];
+  for (const o of ogeler) {
+    const t = o.transform;
+    const once = sonuc[sonuc.length - 1];
+    if (once && o.str !== undefined) {
+      const p = once.transform;
+      const boyut = p[3];
+      const bosluk = t[4] - (p[4] + once.width);
+      const ayniSatir = Math.abs(t[5] - p[5]) < boyut * 0.3 && Math.abs(t[3] - p[3]) < 0.5 && Math.abs(t[1]) < 1e-3 && Math.abs(p[1]) < 1e-3;
+      if (ayniSatir && bosluk > -boyut * 0.3 && bosluk < boyut * 0.8) {
+        const araBosluk = bosluk > boyut * 0.15 && !once.str.endsWith(' ') && !o.str.startsWith(' ') ? ' ' : '';
+        once.str += araBosluk + o.str;
+        once.width = t[4] + o.width - p[4];
+        continue;
+      }
+    }
+    if (o.str !== undefined) sonuc.push({ str: o.str, transform: [...t], width: o.width, fontName: o.fontName });
+  }
+  // Sondaki boşluklar kutuyu gereksiz genişletmesin.
+  for (const o of sonuc) o.str = o.str.replace(/\s+$/, '');
+  return sonuc;
 }
 
 /// Metin öğesinin PDF ve ekran kutusu. Döndürülmüş metinler (t[1], t[2] ≠ 0) düzenlenemez.
@@ -816,7 +844,7 @@ function mdKatmanCiz() {
   });
   for (const [anahtar, g] of md.degisiklik) if (g.sayfa === md.no) katman.appendChild(degisenEl(anahtar, g));
   const n = md.degisiklik.size;
-  $('#md-sayac').textContent = n ? `${n} değişiklik` : '';
+  $('#md-sayac').textContent = n ? d('{n} değişiklik', { n }) : '';
   $('#md-kaydet').disabled = n === 0;
 }
 
@@ -858,8 +886,8 @@ function renkleriOlc([sol, ust, gen, yuk]) {
   let enUzak = 0, yazi = [0, 0, 0];
   for (let i = 0; i < v.length; i += 4) {
     const c = [v[i] / 255, v[i + 1] / 255, v[i + 2] / 255];
-    const d = (c[0] - zeminK[0]) ** 2 + (c[1] - zeminK[1]) ** 2 + (c[2] - zeminK[2]) ** 2;
-    if (d > enUzak) { enUzak = d; yazi = c; }
+    const uz = (c[0] - zeminK[0]) ** 2 + (c[1] - zeminK[1]) ** 2 + (c[2] - zeminK[2]) ** 2;
+    if (uz > enUzak) { enUzak = uz; yazi = c; }
   }
   return { zemin: zeminK, renk: enUzak > 0.05 ? yazi : [0, 0, 0] };
 }
@@ -958,13 +986,13 @@ $('#md-onceki').addEventListener('click', () => { if (md.no > 0) { md.no--; mdCi
 $('#md-sonraki').addEventListener('click', () => { if (md.no < md.belge.numPages - 1) { md.no++; mdCiz(); } });
 const mdKapat = () => { $('#md').hidden = true; md.belge?.destroy(); md.belge = null; };
 $('#md-kapat').addEventListener('click', () => {
-  if (md.degisiklik.size && !confirm('Kaydedilmemiş değişiklikler silinsin mi?')) return;
+  if (md.degisiklik.size && !confirm(d('Kaydedilmemiş değişiklikler silinsin mi?'))) return;
   mdKapat();
 });
 $('#md-kaydet').addEventListener('click', () => {
   const degisiklikler = [...md.degisiklik.values()].map(({ kutu, ...g }) => g);
   const dosya = md.dosya;
-  calistir(ad(dosya), `${degisiklikler.length} değişiklik yazılıyor…`, () => invoke('metin_kaydet', { dosya, degisiklikler }));
+  calistir(ad(dosya), d('{n} değişiklik yazılıyor…', { n: degisiklikler.length }), () => invoke('metin_kaydet', { dosya, degisiklikler }));
   mdKapat();
 });
 document.addEventListener('keydown', (e) => {
@@ -973,6 +1001,17 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'PageUp') $('#md-onceki').click();
 });
 window.addEventListener('resize', () => { if (md.belge) mdCiz(); });
+
+// Dil: Rust'a bildir (dosya ekleri ve iletiler için) ve TR/EN düğmesi.
+invoke('dil_ayarla', { en: DIL === 'en' }).catch(() => {});
+for (const b of document.querySelectorAll('#dil-sec button')) {
+  b.classList.toggle('secili', b.dataset.dil === DIL);
+  b.addEventListener('click', () => {
+    if (b.dataset.dil === DIL) return;
+    try { localStorage.setItem('dil', b.dataset.dil); } catch (_) {}
+    location.reload();
+  });
+}
 
 let ilkArac = ARACLAR[0];
 try { ilkArac = ARACLAR.find((a) => a.id === localStorage.getItem('arac')) || ilkArac; } catch (_) {}

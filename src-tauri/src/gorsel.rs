@@ -30,7 +30,7 @@ pub fn pdf_gorsel(
         .map_err(e)?;
     let belge = PdfDocument::LoadFromFileAsync(&dosya)
         .and_then(|a| a.join())
-        .map_err(|_| "PDF açılamadı (bozuk ya da parola korumalı olabilir)".to_string())?;
+        .map_err(|_| crate::dil::t("PDF açılamadı (bozuk ya da parola korumalı olabilir)", "Could not open the PDF (it may be damaged or password protected)").to_string())?;
     let toplam = belge.PageCount().map_err(e)?;
     std::fs::create_dir_all(klasor).map_err(|e| e.to_string())?;
     let basamak = toplam.to_string().len().max(3);

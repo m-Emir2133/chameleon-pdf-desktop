@@ -320,3 +320,49 @@ fn model_indirme() {
         assert!(model::koseler(&tarama::ac(&ilk).unwrap(), "docaligner-lcnet100").is_some());
     }
 }
+
+/// README ekran görüntüleri için: CHAMELEON_README klasöründeki fotoğraflarda gerçek köşe bulma ve
+/// düzeltme sonuçlarını (arayüzün tarama_hazirla / tarama_onizle yanıtlarıyla aynı biçimde) yazar.
+#[test]
+fn readme_verisi() {
+    let Some(k) = std::env::var_os("CHAMELEON_README").map(PathBuf::from) else { return };
+    let mut veri = serde_json::Map::new();
+    let mut adlar: Vec<PathBuf> = std::fs::read_dir(&k).unwrap().filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e == "jpg")).collect();
+    adlar.sort();
+    for yol in adlar {
+        let img = tarama::ac(&yol).unwrap();
+        let (kose, kaynak) = tarama::koseleri_bul(&img, "docaligner-sa24");
+        let foto = img.resize(1400, 1400, image::imageops::FilterType::Triangle);
+        let orta = img.resize(1200, 1200, image::imageops::FilterType::Triangle);
+        let kart = tarama::duzelt(&orta, &kose, 0, tarama::Filtre::Tarama, 520);
+        let buyuk = tarama::duzelt(&orta, &kose, 0, tarama::Filtre::Tarama, 1100);
+        let renkli = tarama::duzelt(&orta, &kose, 0, tarama::Filtre::Renkli, 520);
+        veri.insert(
+            pdf::ad(&yol),
+            serde_json::json!({
+                "foto": crate::veri_url(&tarama::jpeg(&foto, 85)), "gen": foto.width(), "yuk": foto.height(),
+                "kose": kose, "yol": kaynak,
+                "kart": crate::veri_url(&tarama::jpeg(&kart, 85)),
+                "buyuk": crate::veri_url(&tarama::jpeg(&buyuk, 88)),
+                "renkli": crate::veri_url(&tarama::jpeg(&renkli, 85)),
+            }),
+        );
+        eprintln!("{}: {kaynak}", pdf::ad(&yol));
+    }
+    std::fs::write(k.join("tarama-verisi.json"), serde_json::Value::Object(veri).to_string()).unwrap();
+}
+
+/// CHAMELEON_CIZ klasöründeki her PDF'in sayfalarını (README görselleri için) 110 dpi PNG olarak çizer.
+#[test]
+fn pdf_ciz() {
+    let Some(k) = std::env::var_os("CHAMELEON_CIZ").map(PathBuf::from) else { return };
+    for e in std::fs::read_dir(&k).unwrap().filter_map(|e| e.ok()) {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "pdf") {
+            let hedef = k.join(format!("{}-sayfalar", p.file_stem().unwrap().to_string_lossy()));
+            let _ = std::fs::remove_dir_all(&hedef);
+            let n = gorsel::pdf_gorsel(&p, &hedef, 110, false, |_, _| {}).unwrap().len();
+            eprintln!("{}: {n} sayfa", pdf::ad(&p));
+        }
+    }
+}
