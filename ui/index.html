@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Chameleon PDF</title>
+  <link rel="stylesheet" href="stil.css">
+</head>
+<body>
+  <aside class="yan">
+    <div class="marka">
+      <img src="maskot.png" alt="">
+      <div><b>Chameleon</b><span>PDF</span></div>
+    </div>
+    <nav id="araclar"></nav>
+    <div class="alt-not" id="office-notu"></div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <h1 id="baslik"></h1>
+        <p id="aciklama"></p>
+      </div>
+      <button class="ikincil" id="sec">Dosya seç</button>
+    </header>
+
+    <section id="secenekler" class="secenekler"></section>
+
+    <section id="birak" class="birak">
+      <div class="birak-ic">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <b id="birak-baslik">Dosyaları buraya sürükle</b>
+        <span id="birak-alt"></span>
+      </div>
+    </section>
+
+    <section id="liste-alani" class="liste-alani" hidden>
+      <div class="liste-ust">
+        <b id="liste-sayac"></b>
+        <span class="bosluk"></span>
+        <button class="metin" id="temizle">Listeyi temizle</button>
+        <button class="birincil" id="baslat"></button>
+      </div>
+      <ol id="liste" class="liste"></ol>
+    </section>
+
+    <section id="tarama" class="tarama" hidden>
+      <div class="liste-ust">
+        <b id="tarama-sayac"></b>
+        <span class="ipucu">Sıralamak için kartları sürükle · köşeleri düzeltmek için karta tıkla</span>
+        <span class="bosluk"></span>
+        <button class="metin" id="tarama-temizle">Temizle</button>
+        <button class="birincil" id="tarama-pdf">PDF oluştur</button>
+      </div>
+      <div id="kartlar" class="kartlar"></div>
+    </section>
+
+    <section class="isler-alani">
+      <div class="isler-ust"><b>Son işlemler</b><span class="bosluk"></span><button class="metin" id="isleri-temizle" hidden>Temizle</button></div>
+      <ul id="isler" class="isler"><li class="bos">Henüz işlem yok. Bıraktığın dosyalar kaynakla aynı klasöre kaydedilir.</li></ul>
+    </section>
+  </main>
+
+  <div id="duzenleyici" class="duzenleyici" hidden>
+    <div class="d-ust">
+      <b>Köşeleri ayarla</b>
+      <span class="ipucu">Yuvarlakları belgenin köşelerine sürükle</span>
+      <span class="bosluk"></span>
+      <span id="d-filtre"></span>
+      <button class="ikincil" id="d-otomatik">Otomatik bul</button>
+      <button class="ikincil" id="d-tum">Tüm fotoğraf</button>
+      <button class="metin" id="d-iptal">Vazgeç</button>
+      <button class="birincil" id="d-uygula">Uygula</button>
+    </div>
+    <div class="d-alan" id="d-alan">
+      <div class="d-cerceve" id="d-cerceve">
+        <img id="d-foto" alt="">
+        <svg id="d-svg"></svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="md" class="duzenleyici" hidden>
+    <div class="d-ust">
+      <b id="md-ad"></b>
+      <span class="ipucu">Yazıya tıkla ve değiştir · boş yere tıklayınca yeni yazı eklenir · Enter onaylar, Esc vazgeçer</span>
+      <span class="bosluk"></span>
+      <button class="metin" id="md-onceki" title="Önceki sayfa">‹</button>
+      <span id="md-no" class="md-no"></span>
+      <button class="metin" id="md-sonraki" title="Sonraki sayfa">›</button>
+      <span id="md-sayac" class="ipucu"></span>
+      <button class="metin" id="md-kapat">Kapat</button>
+      <button class="birincil" id="md-kaydet">Kaydet</button>
+    </div>
+    <div class="md-alan" id="md-alan">
+      <div class="md-sayfa" id="md-sayfa">
+        <canvas id="md-tuval"></canvas>
+        <div id="md-katman" class="md-katman"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="perde" class="perde" hidden><div><b>Bırak</b><span id="perde-alt"></span></div></div>
+  <script src="uygulama.js"></script>
+</body>
+</html>

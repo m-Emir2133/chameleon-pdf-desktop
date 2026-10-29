@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Ana pencere: sürükle-bırak olayları ve dosya seçme penceresi",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

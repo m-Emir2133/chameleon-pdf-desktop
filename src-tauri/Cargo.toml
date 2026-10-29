@@ -1,0 +1,46 @@
+[package]
+name = "chameleon-pdf"
+version = "1.0.0"
+description = "Chameleon PDF masaüstü — Office'ten PDF'e ve PDF araçları"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lopdf = "0.46"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "bmp", "gif", "tiff", "rayon"] }
+imageproc = "0.27"
+base64 = "0.22"
+rayon = "1"
+subsetter = "0.2"
+ttf-parser = "0.25"
+getrandom = "0.3"
+# Belge köşesi modeli (DocAligner) için ONNX Runtime; derlemede hazır ikili indirilir ve exe'ye statik bağlanır.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-native", "api-31"] }
+windows = { version = "0.62", features = [
+    "Data_Pdf",
+    "Foundation",
+    "Graphics_Imaging",
+    "Storage",
+    "Storage_Streams",
+    "Win32_System_Com",
+] }
+
+# Testlerde görüntü işleme hata ayıklama derlemesinde çok yavaş; bağımlılıkları optimize et.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

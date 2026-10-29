@@ -1,0 +1,12 @@
+# Rust / Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# The DocAligner model (~83 MB) is not stored in git; see scripts/download-model.ps1
+src-tauri/modeller/*.onnx
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
