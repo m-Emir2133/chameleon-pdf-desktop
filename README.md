@@ -14,6 +14,7 @@ Chameleon PDF is a small Windows app ([Tauri 2](https://tauri.app), Rust + WebVi
 
 - **Drop one file or a whole folder's worth.** Conversion starts the moment you let go. There is no button to press and no dialog to answer.
 - **Identical to Office's own export.** The app drives the Microsoft Office already installed on your PC (PowerPoint, Word, Excel), so fonts, charts, tables and layouts come out as Office's own *Save as PDF* makes them.
+- **No Microsoft Office? LibreOffice does it.** If the free [LibreOffice](https://www.libreoffice.org) is installed, files whose Office app is missing are converted with it instead. LibreOffice runs hidden with its own profile, so a LibreOffice window you have open is left alone.
 - **Next to the original.** `Garden plan.pptx` becomes `Garden plan.pdf` in the same folder. Nothing is ever overwritten; a second copy becomes `Garden plan (2).pdf`.
 - **Your open Office windows are left alone.** Office runs hidden; if PowerPoint, Word or Excel was already open, it stays open.
 - **Fast.** These three sample files were converted in 5.8 s in total on the author's PC, including starting Office: PowerPoint 1.5 s, Word 1.7 s, Excel 2.2 s.
@@ -24,7 +25,9 @@ Supported: `pptx` `ppt` `pptm` `ppsx` `pps` `potx` `odp` · `docx` `doc` `docm` 
 
 <sub>What came out of the three files in the animation above, rendered straight from the PDFs.</sub>
 
-> Office → PDF needs Microsoft Office. Every other tool works without it.
+**Converter** (above the drop area): *Automatic* uses Microsoft Office when the file's Office app is installed and LibreOffice otherwise; if Office fails on a file, LibreOffice tries it once more. *Microsoft Office* or *LibreOffice* forces one of them. The sidebar shows which converters were found.
+
+> Office → PDF needs Microsoft Office or LibreOffice. Every other tool works without them. LibreOffice is found through its registry entry, `Program Files\LibreOffice`, or `PATH`; set `CHAMELEON_SOFFICE` to the full path of `soffice.exe` to point at a portable copy.
 
 ---
 
@@ -112,6 +115,7 @@ The `ort` crate downloads a prebuilt ONNX Runtime during the first build and lin
 |---|---|
 | `src-tauri/src/main.rs` | Tauri commands, output naming, Office conversion driver |
 | `src-tauri/src/office.ps1` | Office COM automation (hidden; never closes Office windows you had open) |
+| `src-tauri/src/libreoffice.rs` | Finds `soffice.exe` and converts with LibreOffice headless (own profile, timeout) |
 | `src-tauri/src/pdf.rs` | Merge, split, extract, rotate, images → PDF (lopdf) |
 | `src-tauri/src/duzen.rs` | Overlays (page numbers, watermark, text edits), compression, encryption |
 | `src-tauri/src/yazi.rs` | Subset-embeds a Windows font as Type0 / Identity-H |

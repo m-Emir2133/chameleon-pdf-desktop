@@ -28,7 +28,7 @@ const IKON = {
 // Her araç: hangi dosyaları kabul ettiği, seçenekleri ve bırakınca hemen mi çalıştığı.
 const ARACLAR = [
   { id: 'office', grup: 'Dönüştür', ad: "PDF'e çevir", ikon: IKON.office, kabul: OFFICE,
-    aciklama: 'PowerPoint, Word ve Excel dosyalarını bilgisayarındaki Office ile PDF yapar.',
+    aciklama: 'PowerPoint, Word ve Excel dosyalarını bilgisayarındaki Microsoft Office ya da LibreOffice ile PDF yapar.',
     birakAlt: 'PPTX, PPT, DOCX, XLSX… bırakır bırakmaz çevrilir', otomatik: true },
   { id: 'tara', grup: 'Dönüştür', ad: 'Belge tara', ikon: IKON.tara, kabul: GORSEL,
     aciklama: 'Telefonla çektiğin belge fotoğraflarını düzeltir, temizler ve tek PDF yapar.',
@@ -63,7 +63,7 @@ for (const a of ARACLAR) for (const k of ['grup', 'ad', 'aciklama', 'birakAlt', 
 
 const ayar = {
   bolAdim: 1, aralik: '', derece: 90, donAralik: '', dpi: 150, jpg: false, taraFiltre: 'tarama', taraModel: 'klasik',
-  seviye: 2, parolaKip: 'koy', konum: 'alt-orta', bicim: '{n} / {N}', baslangic: 1, filigranMetin: DIL === 'en' ? 'CONFIDENTIAL' : 'GİZLİ', opaklik: 0.25,
+  seviye: 2, cevirici: 'otomatik', parolaKip: 'koy', konum: 'alt-orta', bicim: '{n} / {N}', baslangic: 1, filigranMetin: DIL === 'en' ? 'CONFIDENTIAL' : 'GİZLİ', opaklik: 0.25,
 };
 // Parola diske yazılmaz; yalnızca bu oturumda bellekte durur.
 let parola = '';
@@ -112,9 +112,18 @@ function parcali(ad, secenekler, deger) {
     .join('')}</span>`;
 }
 
+const CEVIRICI_NOTU = {
+  otomatik: 'Microsoft Office kuruluysa o, değilse LibreOffice kullanılır. Office çeviremezse LibreOffice ile yeniden denenir.',
+  office: 'Yalnızca Microsoft Office kullanılır.',
+  libreoffice: 'Yalnızca LibreOffice kullanılır (ücretsiz, libreoffice.org).',
+};
+
 function seceneklerCiz() {
   const s = $('#secenekler');
-  if (arac.id === 'bol') {
+  if (arac.id === 'office') {
+    s.innerHTML = `<span class="secenek">${d('Dönüştürücü')} ${parcali('cevirici', [['otomatik', 'Otomatik'], ['office', 'Microsoft Office'], ['libreoffice', 'LibreOffice']], ayar.cevirici)}</span>
+      <span class="ipucu">${d(CEVIRICI_NOTU[ayar.cevirici] || CEVIRICI_NOTU.otomatik)}</span>`;
+  } else if (arac.id === 'bol') {
     s.innerHTML = `<label class="secenek">${d('Her')} <input type="number" min="1" id="bolAdim" value="${ayar.bolAdim}"> ${d('sayfada bir dosya')}</label>`;
   } else if (arac.id === 'cikar') {
     s.innerHTML = `<label class="secenek">${d('Sayfalar')} <input type="text" id="aralik" placeholder="${d('örn. 1-3, 5, 8-')}" value="${kacis(ayar.aralik)}"></label>`;
@@ -280,7 +289,7 @@ async function dosyalarGeldi(yollar) {
   // Office dosyaları hangi araçta bırakılırsa bırakılsın PDF'e çevrilir.
   if (office.length) {
     for (const y of office) isEkle(y, ad(y), d('Sırada…'));
-    invoke('office', { dosyalar: office }).catch((h) => office.forEach((y) => isGuncelle(y, 'hata', String(h), [])));
+    invoke('office', { dosyalar: office, motor: ayar.cevirici }).catch((h) => office.forEach((y) => isGuncelle(y, 'hata', String(h), [])));
   }
   for (const y of diger) {
     const anahtar = `is-${++isSayac}`;
@@ -366,12 +375,16 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
   }
 });
 
-// Office kurulu değilse yan çubukta söyle.
-invoke('office_durumu').then((var_) => {
+// Hangi dönüştürücünün kurulu olduğunu yan çubukta söyle.
+invoke('office_durumu').then(({ office: var_, libreoffice: lo }) => {
   const not = $('#office-notu');
-  if (var_.length === 3) not.textContent = d('Office: hazır');
-  else if (var_.length === 0) { not.textContent = d("Office bulunamadı — PDF'e çevirme çalışmaz"); not.classList.add('uyari'); }
-  else { not.textContent = d('Office: yalnızca {x}', { x: var_.join(', ') }); not.classList.add('uyari'); }
+  const satirlar = [];
+  if (var_.length === 3) satirlar.push(d('Office: hazır'));
+  else if (var_.length) satirlar.push(d('Office: yalnızca {x}', { x: var_.join(', ') }));
+  if (lo) satirlar.push(d('LibreOffice: hazır'));
+  if (!var_.length && !lo) { satirlar.push(d("Office ya da LibreOffice bulunamadı — PDF'e çevirme çalışmaz")); not.classList.add('uyari'); }
+  else if (var_.length < 3 && !lo) not.classList.add('uyari');
+  not.textContent = satirlar.join(' · ');
   const s = document.createElement('div');
   s.id = 'model-notu';
   not.appendChild(s);

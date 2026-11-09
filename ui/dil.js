@@ -14,7 +14,7 @@ const SOZLUK = {
   "PDF'e çevir": 'Office → PDF', 'Belge tara': 'Scan document', 'Görselden PDF': 'Images → PDF', "PDF'ten görsele": 'PDF → images',
   'Birleştir': 'Merge', 'Böl': 'Split', 'Sayfa çıkar': 'Extract pages', 'Döndür': 'Rotate', 'Sıkıştır': 'Compress',
   'Metni düzenle': 'Edit text', 'Sayfa numarası': 'Page numbers', 'Filigran': 'Watermark', 'Parola': 'Password',
-  'PowerPoint, Word ve Excel dosyalarını bilgisayarındaki Office ile PDF yapar.': 'Turns PowerPoint, Word and Excel files into PDF with the Office installed on your PC.',
+  'PowerPoint, Word ve Excel dosyalarını bilgisayarındaki Microsoft Office ya da LibreOffice ile PDF yapar.': 'Turns PowerPoint, Word and Excel files into PDF with the Microsoft Office or LibreOffice installed on your PC.',
   'PPTX, PPT, DOCX, XLSX… bırakır bırakmaz çevrilir': 'PPTX, PPT, DOCX, XLSX… converted the moment you drop them',
   'Telefonla çektiğin belge fotoğraflarını düzeltir, temizler ve tek PDF yapar.': 'Straightens and cleans up phone photos of documents and makes one PDF.',
   'Fotoğrafları bırak — köşeler kendiliğinden bulunur': 'Drop photos — corners are found automatically',
@@ -60,7 +60,13 @@ const SOZLUK = {
   'Oluşturuluyor…': 'Creating…', 'Sayfa {a} çıkarılıyor…': 'Extracting pages {a}…', '{n} dosya': '{n} files', '{n} sayfa': '{n} pages',
   // Office ve model
   'Office: hazır': 'Office: ready',
-  "Office bulunamadı — PDF'e çevirme çalışmaz": 'Office not found — Office → PDF will not work',
+  "Office ya da LibreOffice bulunamadı — PDF'e çevirme çalışmaz": 'Neither Office nor LibreOffice found — Office → PDF will not work',
+  'LibreOffice: hazır': 'LibreOffice: ready',
+  'Dönüştürücü': 'Converter', 'Otomatik': 'Automatic',
+  'Microsoft Office kuruluysa o, değilse LibreOffice kullanılır. Office çeviremezse LibreOffice ile yeniden denenir.':
+    'Uses Microsoft Office if installed, otherwise LibreOffice. If Office fails on a file, LibreOffice tries again.',
+  'Yalnızca Microsoft Office kullanılır.': 'Only Microsoft Office is used.',
+  'Yalnızca LibreOffice kullanılır (ücretsiz, libreoffice.org).': 'Only LibreOffice is used (free, libreoffice.org).',
   'Office: yalnızca {x}': 'Office: only {x}',
   'Klasik (model yok)': 'Classic (no model)', 'İndiriliyor… %{p}': 'Downloading… {p}%', 'İndir ({mb} MB)': 'Download ({mb} MB)',
   'Hazır': 'Ready', 'Sil': 'Delete', 'Model indirme': 'Model download',

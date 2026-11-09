@@ -1,10 +1,11 @@
-// Chameleon PDF masaüstü — Office belgelerini yüklü Office ile PDF'e çevirir, PDF araçlarını
+// Chameleon PDF masaüstü — Office belgelerini yüklü Office ya da LibreOffice ile PDF'e çevirir, PDF araçlarını
 // (birleştir, böl, sayfa çıkar, döndür, görsel ↔ PDF) yerelde çalıştırır.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod dil;
 mod duzen;
 mod gorsel;
+mod libreoffice;
 mod model;
 mod pdf;
 mod tarama;
@@ -70,66 +71,159 @@ async fn arka_planda<T: Send + 'static>(is: impl FnOnce() -> Result<T, String> +
     tauri::async_runtime::spawn_blocking(is).await.map_err(|e| e.to_string())?
 }
 
+/// Dosya uzantısına göre gereken Microsoft Office uygulaması.
+fn office_uygulamasi(yol: &Path) -> Option<&'static str> {
+    let u = yol.extension()?.to_string_lossy().to_lowercase();
+    match u.as_str() {
+        "pptx" | "ppt" | "pptm" | "ppsx" | "pps" | "potx" | "pot" | "odp" => Some("PowerPoint"),
+        "docx" | "doc" | "docm" | "dotx" | "dot" | "odt" | "rtf" => Some("Word"),
+        "xlsx" | "xls" | "xlsm" | "xlsb" | "ods" | "csv" => Some("Excel"),
+        _ => None,
+    }
+}
+
+/// Office belgelerini PDF'e çevirir. `motor`: "office", "libreoffice" ya da otomatik (boş/diğer).
+/// Otomatikte dosyanın Office uygulaması kuruluysa Office, değilse LibreOffice kullanılır;
+/// Office bir dosyada başarısız olursa LibreOffice ile bir kez daha denenir.
 #[tauri::command]
-async fn office(app: AppHandle, dosyalar: Vec<String>) -> Result<(), String> {
+async fn office(app: AppHandle, dosyalar: Vec<String>, motor: Option<String>) -> Result<(), String> {
     arka_planda(move || {
         let mut ayrilan = HashSet::new();
-        let mut liste = String::new();
-        for d in &dosyalar {
-            let k = PathBuf::from(d);
-            let hedef = benzersiz(&klasoru(&k), &govde(&k), "pdf", &mut ayrilan);
-            liste.push_str(&format!("{}\t{}\n", d, hedef.display()));
-        }
-        let gecici = std::env::temp_dir().join(format!("chameleon-{}", std::process::id()));
-        std::fs::create_dir_all(&gecici).map_err(|e| e.to_string())?;
-        let betik = gecici.join("office.ps1");
-        let liste_yolu = gecici.join(format!("liste-{}.txt", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
-        // Windows PowerShell 5.1, BOM'suz betiği ANSI okur; Türkçe iletiler için BOM ekle.
-        std::fs::write(&betik, format!("\u{FEFF}{}", include_str!("office.ps1"))).map_err(|e| e.to_string())?;
-        std::fs::write(&liste_yolu, liste).map_err(|e| e.to_string())?;
+        let isler: Vec<(String, PathBuf)> = dosyalar
+            .iter()
+            .map(|d| {
+                let k = PathBuf::from(d);
+                (d.clone(), benzersiz(&klasoru(&k), &govde(&k), "pdf", &mut ayrilan))
+            })
+            .collect();
+        let motor = motor.unwrap_or_default();
+        let lo = libreoffice::bul();
+        let kurulu = if motor == "libreoffice" { vec![] } else { office_kurulu() };
 
-        let mut cocuk = Command::new("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
-            .arg(&betik)
-            .arg(&liste_yolu)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| dil::s(format!("PowerShell başlatılamadı: {e}"), format!("Could not start PowerShell: {e}")))?;
-        let mut biten = HashSet::new();
-        if let Some(cikti) = cocuk.stdout.take() {
-            for satir in BufReader::new(cikti).lines().map_while(Result::ok) {
-                let mut p = satir.trim_start_matches('\u{FEFF}').splitn(3, '\t');
-                let (tur, kaynak, ileti) = (p.next().unwrap_or(""), p.next().unwrap_or(""), p.next().unwrap_or(""));
-                match tur {
-                    "BASLA" => bildir(&app, kaynak, "calisiyor", dil::t("Office ile çevriliyor…", "Converting with Office…"), vec![]),
-                    "OK" => {
-                        biten.insert(kaynak.to_string());
-                        bildir(&app, kaynak, "tamam", dil::t("PDF hazır", "PDF ready"), vec![ileti.to_string()]);
-                    }
-                    "HATA" => {
-                        biten.insert(kaynak.to_string());
-                        bildir(&app, kaynak, "hata", office_hatasi(ileti), vec![]);
-                    }
-                    _ => {}
+        let mut office_isleri = Vec::new();
+        let mut lo_isleri = Vec::new();
+        for (kaynak, hedef) in isler {
+            let uyg = office_uygulamasi(Path::new(&kaynak));
+            match motor.as_str() {
+                "office" => office_isleri.push((kaynak, hedef)),
+                "libreoffice" if lo.is_some() => lo_isleri.push((kaynak, hedef)),
+                "libreoffice" => bildir(&app, &kaynak, "hata", dil::t("LibreOffice bulunamadı", "LibreOffice not found"), vec![]),
+                _ if uyg.is_some_and(|a| kurulu.iter().any(|k| k == a)) => office_isleri.push((kaynak, hedef)),
+                _ if lo.is_some() => lo_isleri.push((kaynak, hedef)),
+                _ => bildir(
+                    &app,
+                    &kaynak,
+                    "hata",
+                    dil::t(
+                        "Bu dosya türü için ne Microsoft Office ne LibreOffice kurulu",
+                        "Neither Microsoft Office nor LibreOffice is installed for this file type",
+                    ),
+                    vec![],
+                ),
+            }
+        }
+
+        if !office_isleri.is_empty() {
+            let yedekli = lo.is_some() && motor != "office";
+            let basarisiz = office_ile(&app, &office_isleri)?;
+            for (kaynak, hedef, ileti) in basarisiz {
+                if yedekli {
+                    lo_isleri.push((kaynak, hedef));
+                } else {
+                    bildir(&app, &kaynak, "hata", office_hatasi(&ileti), vec![]);
                 }
             }
         }
-        let mut hata_metni = String::new();
-        if let Some(mut e) = cocuk.stderr.take() {
-            use std::io::Read;
-            let _ = e.read_to_string(&mut hata_metni);
-        }
-        let _ = cocuk.wait();
-        let _ = std::fs::remove_file(&liste_yolu);
-        for d in dosyalar.iter().filter(|d| !biten.contains(*d)) {
-            let ileti = hata_metni.lines().find(|l| !l.trim().is_empty()).unwrap_or(dil::t("Office yanıt vermedi", "Office did not respond"));
-            bildir(&app, d, "hata", office_hatasi(ileti), vec![]);
+
+        if let Some(soffice) = lo {
+            for (_, hedef) in &lo_isleri {
+                // Office'in yarıda bıraktığı bir dosya varsa üzerine yazılsın diye temizle.
+                let _ = std::fs::remove_file(hedef);
+            }
+            for (kaynak, hedef) in lo_isleri {
+                bildir(&app, &kaynak, "calisiyor", dil::t("LibreOffice ile çevriliyor…", "Converting with LibreOffice…"), vec![]);
+                match libreoffice::cevir(&soffice, Path::new(&kaynak), &hedef) {
+                    Ok(()) => bildir(&app, &kaynak, "tamam", dil::t("PDF hazır · LibreOffice", "PDF ready · LibreOffice"), vec![hedef.to_string_lossy().into_owned()]),
+                    Err(h) => bildir(&app, &kaynak, "hata", libreoffice_hatasi(&h), vec![]),
+                }
+            }
         }
         Ok(())
     })
     .await
+}
+
+/// Microsoft Office ile (PowerShell + COM) çevirir; başarısız olanları (kaynak, hedef, ileti) döndürür.
+fn office_ile(app: &AppHandle, isler: &[(String, PathBuf)]) -> Result<Vec<(String, PathBuf, String)>, String> {
+    let mut liste = String::new();
+    for (kaynak, hedef) in isler {
+        liste.push_str(&format!("{}\t{}\n", kaynak, hedef.display()));
+    }
+    let gecici = std::env::temp_dir().join(format!("chameleon-{}", std::process::id()));
+    std::fs::create_dir_all(&gecici).map_err(|e| e.to_string())?;
+    let betik = gecici.join("office.ps1");
+    let liste_yolu = gecici.join(format!("liste-{}.txt", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+    // Windows PowerShell 5.1, BOM'suz betiği ANSI okur; Türkçe iletiler için BOM ekle.
+    std::fs::write(&betik, format!("\u{FEFF}{}", include_str!("office.ps1"))).map_err(|e| e.to_string())?;
+    std::fs::write(&liste_yolu, liste).map_err(|e| e.to_string())?;
+
+    let mut cocuk = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&betik)
+        .arg(&liste_yolu)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| dil::s(format!("PowerShell başlatılamadı: {e}"), format!("Could not start PowerShell: {e}")))?;
+    let mut biten = HashSet::new();
+    let mut basarisiz = Vec::new();
+    let hedefi = |kaynak: &str| isler.iter().find(|(k, _)| k == kaynak).map(|(_, h)| h.clone());
+    if let Some(cikti) = cocuk.stdout.take() {
+        for satir in BufReader::new(cikti).lines().map_while(Result::ok) {
+            let mut p = satir.trim_start_matches('\u{FEFF}').splitn(3, '\t');
+            let (tur, kaynak, ileti) = (p.next().unwrap_or(""), p.next().unwrap_or(""), p.next().unwrap_or(""));
+            match tur {
+                "BASLA" => bildir(app, kaynak, "calisiyor", dil::t("Office ile çevriliyor…", "Converting with Office…"), vec![]),
+                "OK" => {
+                    biten.insert(kaynak.to_string());
+                    bildir(app, kaynak, "tamam", dil::t("PDF hazır", "PDF ready"), vec![ileti.to_string()]);
+                }
+                "HATA" => {
+                    biten.insert(kaynak.to_string());
+                    if let Some(h) = hedefi(kaynak) {
+                        basarisiz.push((kaynak.to_string(), h, ileti.to_string()));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut hata_metni = String::new();
+    if let Some(mut e) = cocuk.stderr.take() {
+        use std::io::Read;
+        let _ = e.read_to_string(&mut hata_metni);
+    }
+    let _ = cocuk.wait();
+    let _ = std::fs::remove_file(&liste_yolu);
+    let ileti = hata_metni.lines().find(|l| !l.trim().is_empty()).unwrap_or(dil::t("Office yanıt vermedi", "Office did not respond"));
+    for (kaynak, hedef) in isler.iter().filter(|(k, _)| !biten.contains(k)) {
+        basarisiz.push((kaynak.clone(), hedef.clone(), ileti.to_string()));
+    }
+    Ok(basarisiz)
+}
+
+/// LibreOffice'in ham hatasını kullanıcının anlayacağı bir cümleye çevirir.
+fn libreoffice_hatasi(ham: &str) -> String {
+    match ham {
+        "timeout" => dil::t("LibreOffice zamanında bitiremedi", "LibreOffice did not finish in time").into(),
+        "no output" => dil::t(
+            "LibreOffice PDF üretemedi (dosya bozuk ya da parola korumalı olabilir)",
+            "LibreOffice produced no PDF (the file may be damaged or password protected)",
+        )
+        .into(),
+        _ => dil::s(format!("LibreOffice ile çevrilemedi: {ham}"), format!("Could not convert with LibreOffice: {ham}")),
+    }
 }
 
 /// COM hatalarını kullanıcının anlayacağı bir cümleye çevirir.
@@ -445,9 +539,8 @@ async fn model_sil(kimlik: String) -> Result<(), String> {
     arka_planda(move || model::sil(&kimlik)).await
 }
 
-/// Office uygulamalarının kayıtlı olup olmadığı (arayüz uyarısı için).
-#[tauri::command]
-fn office_durumu() -> Vec<String> {
+/// Kayıtlı Microsoft Office uygulamaları (PowerPoint, Word, Excel).
+fn office_kurulu() -> Vec<String> {
     ["PowerPoint", "Word", "Excel"]
         .into_iter()
         .filter(|a| {
@@ -461,6 +554,20 @@ fn office_durumu() -> Vec<String> {
         })
         .map(String::from)
         .collect()
+}
+
+#[derive(Serialize)]
+struct OfficeDurumu {
+    office: Vec<String>,
+    libreoffice: bool,
+}
+
+/// Hangi dönüştürücülerin kurulu olduğu (arayüz uyarısı için).
+#[tauri::command]
+async fn office_durumu() -> OfficeDurumu {
+    arka_planda(|| Ok(OfficeDurumu { office: office_kurulu(), libreoffice: libreoffice::bul().is_some() }))
+        .await
+        .unwrap_or(OfficeDurumu { office: vec![], libreoffice: false })
 }
 
 fn main() {
