@@ -1037,7 +1037,8 @@ for (const b of document.querySelectorAll('#dil-sec button')) {
 
 // ---------- Kısa yollar ----------
 // Masaüstündeki simgeye bırakılan ya da sağ tık / Gönder menüsünden gelen dosyalar uygulamaya
-// komut satırıyla gelir. Rust ilk açılışın isteğini saklar; çalışırken gelenleri "disaridan" olayıyla yollar.
+// komut satırıyla gelir. Rust istekleri kuyrukta tutar ve "disaridan" olayıyla haber verir; arayüz
+// açılışta ve her olayda kuyruğu boşaltır (sayfa yüklenmeden gelen olay kaybolsa da istek kaybolmaz).
 const KISAYOL_EYLEMLERI = [
   // Başlıklar masaüstündeki kısayolun adıyla aynı (Rust: kabuk::EYLEMLER).
   ['pdf', DIL === 'en' ? 'Convert to PDF' : "PDF'e çevir", 'PowerPoint, Word, Excel ya da fotoğraf bırak → PDF masaüstüne'],
@@ -1063,7 +1064,7 @@ function kisayolPaneli() {
   }).join('');
   return `<div class="kisayollar">
     <h3>${d('Masaüstü simgeleri')}</h3>
-    <p class="ipucu">${d('Dosyaları simgenin üzerine sürükleyip bırak. Uygulama kendiliğinden açılır, işi yapar, sonucu masaüstüne koyar ve kapanır.')}</p>
+    <p class="ipucu">${d('Dosyaları simgenin üzerine sürükleyip bırak. Pencere açılmadan arka planda yapılır, sonuç masaüstüne gelir. Bir sorun olursa pencere açılıp nedenini gösterir.')}</p>
     ${masaustu}
     <h3>${d('Dosya menüleri')}</h3>
     <div class="ks-satir"><div><b>${d('Sağ tık menüsü')}</b><span>${d("Office dosyaları ve fotoğraflarda “PDF'e çevir”, PDF'lerde “PDF sıkıştır” ve “PDF birleştir”. Sonuç dosyanın yanına kaydedilir.")}</span></div>
@@ -1096,7 +1097,6 @@ $('#secenekler').addEventListener('click', async (e) => {
 let bekleyen = null;
 let bekleyenZaman = 0;
 function disaridanGeldi(istek) {
-  kapanisIptal(); // geri sayım sürerken yeni dosya geldiyse açık kal
   if (bekleyen && bekleyen.eylem === istek.eylem && bekleyen.masaustu === istek.masaustu) {
     for (const y of istek.dosyalar) if (!bekleyen.dosyalar.includes(y)) bekleyen.dosyalar.push(y);
     bekleyen.yeni = bekleyen.yeni && istek.yeni;
@@ -1117,7 +1117,12 @@ async function bitmesiniBekle(anahtarlar) {
 
 const dogalSira = (a, b) => ad(a).localeCompare(ad(b), undefined, { numeric: true, sensitivity: 'base' });
 
-async function hizliCalistir({ dosyalar, eylem, masaustu, yeni }) {
+// Kısa yoldan açılınca pencere gizli kalır; tüm işler bitince Rust uygulamayı kapatır (hata varsa pencereyi açar).
+let calisanIs = 0;
+let hepsiBasarili = true;
+
+async function hizliCalistir({ dosyalar, eylem, masaustu }) {
+  calisanIs += 1;
   const islerim = [];
   const hataEkle = (baslik, ileti) => { const k = `is-${++isSayac}`; isEkle(k, baslik, ''); isGuncelle(k, 'hata', ileti, []); islerim.push(Promise.resolve(false)); };
   const calistirIzle = (baslik, ileti, is) => {
@@ -1150,30 +1155,21 @@ async function hizliCalistir({ dosyalar, eylem, masaustu, yeni }) {
     for (const y of pdfler) calistirIzle(ad(y), d('Görseller küçültülüyor…'), () => invoke('sikistir', { dosya: y, seviye: ayar.seviye, masaustu }));
   }
   const sonuc = await Promise.all(islerim);
-  // Yalnızca bu iş için açıldıysa ve her şey yolundaysa kendiliğinden kapan.
-  if (yeni && sonuc.length && sonuc.every(Boolean)) kapanisSayaci(masaustu);
+  calisanIs -= 1;
+  if (!sonuc.length || !sonuc.every(Boolean)) hepsiBasarili = false;
+  // Başka iş kalmadıysa bildir. Pencere gizliyse (uygulama yalnızca bu iş için açıldıysa) Rust kapatır ya da
+  // hatayı göstermek için pencereyi açar; pencere açıksa hiçbir şey olmaz. Sağ tıkta ikinci süreçten gelen
+  // dosyalar yeni=false taşır, bu yüzden karar `yeni` ile değil pencerenin görünürlüğüyle verilir.
+  if (calisanIs === 0 && !bekleyen) {
+    const basarili = hepsiBasarili;
+    hepsiBasarili = true;
+    invoke('arka_plan_bitti', { basarili }).catch(() => {});
+  }
 }
 
-let kapanisZamani = 0;
-function kapanisIptal() {
-  clearInterval(kapanisZamani);
-  document.querySelector('.tost')?.remove();
-}
-
-function kapanisSayaci(masaustu) {
-  kapanisIptal();
-  const t = document.createElement('div');
-  t.className = 'tost';
-  let n = 4;
-  const yaz = () => { t.innerHTML = `<span>${d(masaustu ? 'Bitti — masaüstüne kaydedildi.' : 'Bitti.')} ${d('{n} sn içinde kapanıyor', { n })}</span><button class="metin" id="acik-kalsin">${d('Açık kalsın')}</button>`; };
-  yaz();
-  document.body.appendChild(t);
-  kapanisZamani = setInterval(() => { n -= 1; if (n <= 0) { clearInterval(kapanisZamani); invoke('kapat'); } else yaz(); }, 1000);
-  t.addEventListener('click', (e) => { if (e.target.closest('#acik-kalsin')) kapanisIptal(); });
-}
-
-listen('disaridan', ({ payload }) => disaridanGeldi(payload));
-invoke('acilis_istegi').then((i) => { if (i) disaridanGeldi(i); }).catch(() => {});
+const kuyruguAl = () => invoke('acilis_istegi').then((l) => l.forEach(disaridanGeldi)).catch(() => {});
+listen('disaridan', kuyruguAl);
+kuyruguAl();
 
 let ilkArac = ARACLAR[0];
 try { ilkArac = ARACLAR.find((a) => a.id === localStorage.getItem('arac')) || ilkArac; } catch (_) {}

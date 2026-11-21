@@ -2,7 +2,7 @@
 #   pwsh scripts/e2e-kisayol.ps1 -Exe src-tauri\target\release\chameleon-pdf.exe -Pptx <örnek.pptx>
 # 1) Masaüstü simgesi uygulamanın kendi koduyla kurulur (--kisayol masaustu pdf).
 # 2) PPTX, Explorer'ın sürükle-bırakta kullandığı yolla (kısayolun IDropTarget'ı) simgeye bırakılır.
-# 3) PDF masaüstünde belirmeli ve yalnızca bu iş için açılan uygulama kendiliğinden kapanmalı.
+# 3) PDF masaüstünde belirmeli; yalnızca bu iş için açılan uygulama hiç pencere göstermeden kapanmalı.
 # 4) Uygulama açıkken sağ tık menüsünden iki PDF "birleştir"e gönderilir: tek pencere, tek sonuç.
 param(
   [Parameter(Mandatory)] [string]$Exe,
@@ -24,6 +24,31 @@ function Bekle([scriptblock]$kosul, [int]$saniye) {
   return [bool](& $kosul)
 }
 function Uygulama { @(Get-Process chameleon-pdf -ErrorAction SilentlyContinue) }
+# Kısa yoldan başlayan işte pencere hiç görünmemeli; Bekle döngülerinde görünür pencere var mı bak.
+# Process.MainWindowHandle işe yaramaz: tao ve single-instance eklentisi 14x14'lük görünmez yardımcı
+# pencereler açar (WS_VISIBLE ama ekranda yok). Gerçek pencereyi boyutundan tanı.
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class Gorunur {
+  delegate bool CB(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(CB cb, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [StructLayout(LayoutKind.Sequential)] struct R { public int l, t, r, b; }
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out R r);
+  public static bool PencereVar(uint pid) {
+    bool var_ = false;
+    EnumWindows((h, l) => {
+      uint p; GetWindowThreadProcessId(h, out p); R r;
+      if (p == pid && IsWindowVisible(h) && GetWindowRect(h, out r) && r.r - r.l > 200 && r.b - r.t > 200) var_ = true;
+      return true;
+    }, IntPtr.Zero);
+    return var_;
+  }
+}
+'@
+$script:pencereGorundu = $false
+function PencereVarMi { foreach ($p in Uygulama) { if ([Gorunur]::PencereVar([uint32]$p.Id)) { $script:pencereGorundu = $true } } }
 function Calistir([string[]]$a) { (Start-Process $Exe -ArgumentList $a -Wait -PassThru -WindowStyle Hidden).ExitCode }
 function EkranGoruntusu($ad) {
   try {
@@ -110,9 +135,10 @@ $t0 = Get-Date
 $birak = [Birak]::Yap($kaynak, $lnk)
 Write-Host "  $birak"
 Kontrol ($birak -notlike 'HATA*') 'Explorer sürükle-bırak çağrısı yapıldı'
-Kontrol (Bekle { (Uygulama).Count -gt 0 -or (Test-Path -LiteralPath $pdf) } 30) 'bırakınca uygulama başladı'
-Start-Sleep 3; EkranGoruntusu '1-birakinca.png'
-Kontrol (Bekle { Test-Path -LiteralPath $pdf } 240) "PDF masaüstünde: $pdf"
+$script:pencereGorundu = $false
+Kontrol (Bekle { PencereVarMi; (Uygulama).Count -gt 0 -or (Test-Path -LiteralPath $pdf) } 30) 'bırakınca uygulama başladı'
+Start-Sleep 3; PencereVarMi; EkranGoruntusu '1-birakinca.png'
+Kontrol (Bekle { PencereVarMi; Test-Path -LiteralPath $pdf } 240) "PDF masaüstünde: $pdf"
 if (Test-Path -LiteralPath $pdf) {
   Write-Host ("  {0:N1} sn, {1} bayt" -f ((Get-Date) - $t0).TotalSeconds, (Get-Item -LiteralPath $pdf).Length)
   $bas = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($pdf)[0..4])
@@ -120,14 +146,41 @@ if (Test-Path -LiteralPath $pdf) {
   Copy-Item -LiteralPath $pdf (Join-Path $Cikti 'masaustu-sonuc.pdf')
 }
 EkranGoruntusu '2-bitince.png'
-Kontrol (Bekle { (Uygulama).Count -eq 0 } 30) 'iş bitince uygulama kendiliğinden kapandı'
+Kontrol (Bekle { PencereVarMi; (Uygulama).Count -eq 0 } 30) 'iş bitince uygulama kendiliğinden kapandı'
+Kontrol (-not $script:pencereGorundu) 'iş boyunca hiç pencere açılmadı'
 
-Adim 'Sağ tık menüsü kuruluyor ve uygulama açıkken iki PDF birleştiriliyor'
+Adim 'Sağ tık menüsü kuruluyor'
 Kontrol ((Calistir '--kisayol', 'sagtik') -eq 0) 'sağ tık kurulumu 0 ile çıktı'
 $anahtar = 'HKCU:\Software\Classes\SystemFileAssociations\.pptx\shell\ChameleonPDF'
 Kontrol (Test-Path $anahtar) 'kayıt defterinde .pptx girdisi var'
 Write-Host "  .pptx komutu: $((Get-ItemProperty "$anahtar\command").'(default)')"
 Write-Host "  .pptx etiketi: $((Get-ItemProperty $anahtar).'(default)')"
+
+Adim 'Uygulama kapalıyken sağ tık "PDF''e çevir": pencere açılmadan kaynağın yanına'
+$yanina = [IO.Path]::ChangeExtension($kaynak, 'pdf')
+Remove-Item -LiteralPath $yanina -ErrorAction SilentlyContinue
+$script:pencereGorundu = $false
+$kabuk = New-Object -ComObject Shell.Application
+$kabuk.Namespace((Split-Path $kaynak)).ParseName((Split-Path $kaynak -Leaf)).InvokeVerb('ChameleonPDF')
+Kontrol (Bekle { PencereVarMi; Test-Path -LiteralPath $yanina } 240) "PDF kaynağın yanında: $yanina"
+Kontrol (Bekle { PencereVarMi; (Uygulama).Count -eq 0 } 30) 'uygulama kendiliğinden kapandı'
+Kontrol (-not $script:pencereGorundu) 'hiç pencere açılmadı'
+Adim 'Uygulama kapalıyken sağ tıkla iki PDF birleştiriliyor (Explorer her dosya için ayrı süreç başlatır)'
+$kapali = Join-Path $env:TEMP 'chameleon e2e\kapali'
+New-Item -ItemType Directory -Force $kapali | Out-Null
+Get-ChildItem $kapali | Remove-Item -Force
+if (Test-Path -LiteralPath $pdf) {
+  Copy-Item -LiteralPath $pdf (Join-Path $kapali 'k1.pdf'); Copy-Item -LiteralPath $pdf (Join-Path $kapali 'k2.pdf')
+}
+$script:pencereGorundu = $false
+$nsk = (New-Object -ComObject Shell.Application).Namespace($kapali)
+foreach ($ad in 'k1.pdf', 'k2.pdf') { $nsk.ParseName($ad).InvokeVerb('ChameleonPDFBirlestir') }
+Kontrol (Bekle { PencereVarMi; @(Get-ChildItem $kapali -Filter '* - *.pdf').Count -gt 0 } 60) 'iki süreçten gelen dosyalar tek işte birleşti'
+Kontrol (Bekle { PencereVarMi; (Uygulama).Count -eq 0 } 30) 'uygulama kendiliğinden kapandı'
+Kontrol (-not $script:pencereGorundu) 'hiç pencere açılmadı'
+Get-ChildItem $kapali | ForEach-Object { Write-Host "  $($_.Name) $($_.Length)" }
+
+Adim 'Uygulama açıkken sağ tıkla iki PDF birleştiriliyor'
 $klasor = Join-Path $env:TEMP 'chameleon e2e\birlestir'
 New-Item -ItemType Directory -Force $klasor | Out-Null
 Get-ChildItem $klasor | Remove-Item -Force

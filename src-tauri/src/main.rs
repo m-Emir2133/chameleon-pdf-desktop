@@ -584,11 +584,13 @@ async fn office_durumu() -> OfficeDurumu {
 }
 
 /// Uygulama dosyalarla başlatıldıysa (kısayola bırakma, sağ tık, Gönder) o istek; bir kez okunur.
-struct Acilis(Mutex<Option<kabuk::Istek>>);
+/// Dışarıdan (komut satırı, sonraki süreçler) gelen ve arayüzün henüz almadığı istekler. Olay doğrudan
+/// istekle yollanmaz: gizli pencerenin sayfası daha yüklenmeden gelen olay kaybolurdu.
+struct Acilis(Mutex<Vec<kabuk::Istek>>);
 
 #[tauri::command]
-fn acilis_istegi(durum: tauri::State<Acilis>) -> Option<kabuk::Istek> {
-    durum.0.lock().ok()?.take()
+fn acilis_istegi(durum: tauri::State<Acilis>) -> Vec<kabuk::Istek> {
+    durum.0.lock().map(|mut k| std::mem::take(&mut *k)).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -611,6 +613,30 @@ fn kapat(app: AppHandle) {
     app.exit(0);
 }
 
+fn pencereyi_goster(app: &AppHandle) {
+    if let Some(p) = app.get_webview_window("main") {
+        let _ = p.show();
+        let _ = p.unminimize();
+        let _ = p.set_focus();
+    }
+}
+
+/// Kısa yoldan gelen iş pencere hiç açılmadan bitti. Pencere hâlâ gizliyse: başarılıysa uygulama kapanır,
+/// değilse hatayı görsün diye pencere açılır. Kullanıcı bu arada pencereyi açtıysa hiçbir şey yapılmaz.
+/// Pencere gizliydiyse true döner.
+#[tauri::command]
+fn arka_plan_bitti(app: AppHandle, basarili: bool) -> bool {
+    let gizli = app.get_webview_window("main").is_some_and(|p| !p.is_visible().unwrap_or(true));
+    if gizli {
+        if basarili {
+            app.exit(0);
+        } else {
+            pencereyi_goster(&app);
+        }
+    }
+    gizli
+}
+
 fn main() {
     // Konsol çıktısı yok; panik olursa en azından geçici klasöre not düş.
     std::panic::set_hook(Box::new(|bilgi| {
@@ -630,27 +656,34 @@ fn main() {
         }
         std::process::exit(if sonuc.is_ok() { 0 } else { 1 });
     }
+    // Kısa yoldan dosyayla açılınca pencere hiç gösterilmez: iş arka planda yapılır, uygulama kapanır.
+    let acilis = kabuk::arguman_coz(&argumanlar, true);
+    let arka_plan = acilis.is_some();
     tauri::Builder::default()
-        // İlk eklenti olmalı: ikinci açılışın dosyalarını çalışan pencereye verip kendini kapatır.
+        // İlk eklenti olmalı: ikinci açılışın dosyalarını çalışan sürece verip kendini kapatır.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _klasor| {
-            if let Some(i) = kabuk::arguman_coz(argv.get(1..).unwrap_or_default(), false) {
-                let _ = app.emit("disaridan", i);
-            }
-            if let Some(p) = app.get_webview_window("main") {
-                let _ = p.unminimize();
-                let _ = p.show();
-                let _ = p.set_focus();
+            match kabuk::arguman_coz(argv.get(1..).unwrap_or_default(), false) {
+                Some(i) => {
+                    if let Ok(mut k) = app.state::<Acilis>().0.lock() {
+                        k.push(i);
+                    }
+                    let _ = app.emit("disaridan", ());
+                    // Arka planda iş sürerken gelen dosyalar da sessizce işlenir; pencere açıksa öne gelir.
+                    if let Some(p) = app.get_webview_window("main") {
+                        if p.is_visible().unwrap_or(false) {
+                            let _ = p.unminimize();
+                            let _ = p.set_focus();
+                        }
+                    }
+                }
+                None => pencereyi_goster(app),
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        .manage(Acilis(Mutex::new(kabuk::arguman_coz(&argumanlar, true))))
-        .setup(|app| {
-            // Gizli bir süreçten başlatılınca Windows ilk pencereyi simge durumunda açabiliyor.
-            if let Some(p) = app.get_webview_window("main") {
-                if p.is_minimized().unwrap_or(false) {
-                    let _ = p.unminimize();
-                }
-                let _ = p.set_focus();
+        .manage(Acilis(Mutex::new(acilis.into_iter().collect())))
+        .setup(move |app| {
+            if !arka_plan {
+                pencereyi_goster(app.handle());
             }
             Ok(())
         })
@@ -683,7 +716,8 @@ fn main() {
             acilis_istegi,
             kisayol_durumu,
             kisayol_ayarla,
-            kapat
+            kapat,
+            arka_plan_bitti
         ])
         .run(tauri::generate_context!())
         .expect("Chameleon PDF başlatılamadı");

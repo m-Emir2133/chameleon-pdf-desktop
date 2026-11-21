@@ -37,8 +37,8 @@ Open **Shortcuts → Desktop & right-click** once and pick what you want. Everyt
 
 <p align="center"><img src="docs/shortcuts.png" width="860" alt="The Shortcuts page with desktop icons, right-click menu and Send To menu"></p>
 
-- **Desktop icons — drop and done.** Drag a PowerPoint onto the **Convert to PDF** icon on your desktop: the app opens, converts it, puts `Deck.pdf` on the desktop and closes itself after a 4-second countdown (press *Keep open* to stop it). Office files each become a PDF; photos dropped together become one PDF. Two more icons do the same for **Merge PDFs** (sorted by name, so `page 2` comes before `page 10`) and **Compress PDF**. If anything fails the window stays open and shows why.
-- **Right-click menu.** *Convert to PDF (Chameleon)* on Office files and photos, *Compress PDF* and *Merge PDFs* on PDFs. Results are saved next to the file. On Windows 11 the entries are under *Show more options* (or Shift + right-click).
+- **Desktop icons — drop and done.** Drag a PowerPoint onto the **Convert to PDF** icon on your desktop: `Deck.pdf` appears on the desktop a few seconds later. No window opens: the app converts in the background and exits. Office files each become a PDF; photos dropped together become one PDF. Two more icons do the same for **Merge PDFs** (sorted by name, so `page 2` comes before `page 10`) and **Compress PDF**. If anything fails, the window opens and shows why.
+- **Right-click menu.** *Convert to PDF (Chameleon)* on Office files and photos, *Compress PDF* and *Merge PDFs* on PDFs. Results are saved next to the file, also without opening a window. On Windows 11 the entries are under *Show more options* (or Shift + right-click).
 - **Send To menu.** Select files in Explorer → *Send to* → *Convert to PDF (Chameleon)*, *Merge PDFs* or *Compress PDF*.
 - **One window.** If the app is already open, files from any of these routes join that window instead of starting a second copy; files selected together in Explorer arrive as one job.
 
@@ -47,7 +47,7 @@ Open **Shortcuts → Desktop & right-click** once and pick what you want. Everyt
 - Dropping files onto an `.exe` or onto a shortcut (`.lnk`) makes Windows start the program with the file paths as command-line arguments, after the shortcut's own arguments. The desktop icons are ordinary shortcuts to `chameleon-pdf.exe` with `--eylem pdf|birlestir|sikistir --masaustu`; the app reads them at start-up. Send To shortcuts are the same without `--masaustu`.
 - The right-click entries are static verbs under `HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell`, written with `reg import`. Explorer starts one process per selected file for such verbs, so the app is single-instance ([tauri-plugin-single-instance](https://v2.tauri.app/plugin/single-instance/)): later processes hand their files to the first one and exit, and files arriving within 0.7 s are treated as one job.
 - Windows 11's top-level context menu only shows handlers that implement `IExplorerCommand` from a packaged (MSIX or sparse-package) app. That needs signing and an installer, which this unzip-and-run app deliberately avoids, so the entries live under *Show more options* for now.
-- Converting completely headless (no window at all) was considered; showing the normal window with a short auto-close keeps errors visible (a missing Office, a password-protected file) instead of failing silently.
+- Jobs started from a shortcut run with the window hidden: it is created invisible and shown only on a normal start. When every job is done the app exits; if any failed (a missing Office, a password-protected file) the window is shown with the error instead of failing silently.
 </details>
 
 ---

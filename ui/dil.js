@@ -68,8 +68,8 @@ const SOZLUK = {
   'PDF birleştir': 'Merge PDFs', 'PDF sıkıştır': 'Compress PDF',
   'Kaldır': 'Remove', 'Masaüstüne ekle': 'Add to desktop', 'Ekle': 'Add', 'Masaüstünde': 'On desktop', 'Açık': 'On',
   'Masaüstü simgeleri': 'Desktop icons', 'Dosya menüleri': 'File menus',
-  'Dosyaları simgenin üzerine sürükleyip bırak. Uygulama kendiliğinden açılır, işi yapar, sonucu masaüstüne koyar ve kapanır.':
-    'Drag files onto the icon and let go. The app opens by itself, does the job, puts the result on the desktop and closes.',
+  'Dosyaları simgenin üzerine sürükleyip bırak. Pencere açılmadan arka planda yapılır, sonuç masaüstüne gelir. Bir sorun olursa pencere açılıp nedenini gösterir.':
+    'Drag files onto the icon and let go. It runs in the background without opening a window and the result appears on the desktop. If something goes wrong, the window opens and shows why.',
   'Sağ tık menüsü': 'Right-click menu',
   "Office dosyaları ve fotoğraflarda “PDF'e çevir”, PDF'lerde “PDF sıkıştır” ve “PDF birleştir”. Sonuç dosyanın yanına kaydedilir.":
     '“Convert to PDF” on Office files and photos, “Compress PDF” and “Merge PDFs” on PDFs. The result is saved next to the file.',
@@ -80,8 +80,6 @@ const SOZLUK = {
     'On Windows 11 these entries appear under “Show more options” (or Shift + right-click). Everything is added to your user account only; no administrator rights needed.',
   'Kısa yol': 'Shortcut', 'Uygulamayı açmadan: masaüstüne bırak-çevir simgesi ekle': 'Without opening the app: add a drop-to-convert desktop icon', 'Zaten PDF': 'Already a PDF', "PDF'e çevrilemeyen dosya türü": 'This file type cannot be converted to PDF',
   'Birleştirmek için en az iki PDF bırak': 'Drop at least two PDFs to merge',
-  'Bitti — masaüstüne kaydedildi.': 'Done — saved to the desktop.', 'Bitti.': 'Done.',
-  '{n} sn içinde kapanıyor': 'closing in {n} s', 'Açık kalsın': 'Keep open',
   // Office ve model
   'Office: hazır': 'Office: ready',
   "Office ya da LibreOffice bulunamadı — PDF'e çevirme çalışmaz": 'Neither Office nor LibreOffice found — Office → PDF will not work',
