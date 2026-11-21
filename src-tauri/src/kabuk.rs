@@ -162,7 +162,7 @@ pub fn ayarla(tur: &str, eylem: &str, acik: bool) -> Result<(), String> {
             }
         }
         "sagtik" => sag_tik(acik)?,
-        _ => return Err("?".into()),
+        _ => return Err(format!("bilinmeyen kısa yol türü: {tur} (masaustu, gonder, sagtik)")),
     }
     Ok(())
 }

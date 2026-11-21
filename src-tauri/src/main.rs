@@ -619,6 +619,17 @@ fn main() {
         }
     }));
     let argumanlar: Vec<String> = std::env::args().skip(1).collect();
+    // Pencere açmadan kısa yol kur/kaldır: --kisayol masaustu|gonder|sagtik [eylem] [--kaldir] [--en]
+    if let Some(i) = argumanlar.iter().position(|a| a == "--kisayol") {
+        dil::ayarla(argumanlar.iter().any(|a| a == "--en"));
+        let tur = argumanlar.get(i + 1).map(String::as_str).unwrap_or("");
+        let eylem = argumanlar.get(i + 2).filter(|a| !a.starts_with("--")).map(String::as_str).unwrap_or("pdf");
+        let sonuc = kabuk::ayarla(tur, eylem, !argumanlar.iter().any(|a| a == "--kaldir"));
+        if let Err(h) = &sonuc {
+            eprintln!("{h}");
+        }
+        std::process::exit(if sonuc.is_ok() { 0 } else { 1 });
+    }
     tauri::Builder::default()
         // İlk eklenti olmalı: ikinci açılışın dosyalarını çalışan pencereye verip kendini kapatır.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _klasor| {
