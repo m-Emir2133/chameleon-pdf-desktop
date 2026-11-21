@@ -1,4 +1,4 @@
-# Kısa yolların Windows'ta uçtan uca denemesi (GitHub Actions windows-latest ya da kendi bilgisayarın).
+﻿# Kısa yolların Windows'ta uçtan uca denemesi (GitHub Actions windows-latest ya da kendi bilgisayarın).
 #   pwsh scripts/e2e-kisayol.ps1 -Exe src-tauri\target\release\chameleon-pdf.exe -Pptx <örnek.pptx>
 # 1) Masaüstü simgesi uygulamanın kendi koduyla kurulur (--kisayol masaustu pdf).
 # 2) PPTX, Explorer'ın sürükle-bırakta kullandığı yolla (kısayolun IDropTarget'ı) simgeye bırakılır.
