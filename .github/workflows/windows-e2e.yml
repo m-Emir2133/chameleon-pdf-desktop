@@ -1,0 +1,38 @@
+# Gerçek Windows'ta derler, birim testlerini çalıştırır ve kısa yolları uçtan uca dener
+# (masaüstü simgesine PPTX bırakma, sağ tık ile birleştirme, Gönder menüsü). Bkz. scripts/e2e-kisayol.ps1
+name: windows-e2e
+on:
+  push:
+    branches: [claude/libreoffice-bunda-windows-yd65dv]
+  workflow_dispatch:
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Derle
+        working-directory: src-tauri
+        run: cargo build --release
+      - name: LibreOffice kur (bu makinede Microsoft Office yok)
+        run: choco install libreoffice-fresh -y --no-progress
+      - name: Örnek sunum üret
+        shell: pwsh
+        run: |
+          pip install --quiet python-pptx
+          python -c "from pptx import Presentation; from pptx.util import Inches; p=Presentation(); s=p.slides.add_slide(p.slide_layouts[1]); s.shapes.title.text='Chameleon PDF deneme'; s.placeholders[1].text='Masaüstü simgesine bırakıldı → PDF'; s2=p.slides.add_slide(p.slide_layouts[5]); s2.shapes.title.text='İkinci slayt ğüşıöç'; p.save('ornek.pptx')"
+      - name: Birim testleri
+        working-directory: src-tauri
+        run: cargo test -- --test-threads=1
+      - name: Uçtan uca kısa yol denemesi
+        shell: pwsh
+        run: ./scripts/e2e-kisayol.ps1 -Exe src-tauri/target/release/chameleon-pdf.exe -Pptx ornek.pptx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-cikti
+          path: e2e-cikti
