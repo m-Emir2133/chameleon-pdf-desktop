@@ -22,6 +22,7 @@ const IKON = {
   sayfaNo: ikon('<path d="M6 3h9l3 3v15H6z"/><path d="M10 17h4M12 13v4"/>'),
   filigran: ikon('<path d="M6 3h9l3 3v15H6z"/><path d="m8 16 8-6"/>'),
   metin: ikon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m14 6 4 4"/>'),
+  kisayol: ikon('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
   pdfGorsel: ikon('<path d="M6 3h9l3 3v6"/><path d="M6 3v10"/><rect x="9" y="13" width="12" height="8" rx="1.5"/><path d="m9 19 3-3 3 3 2-2 4 4"/>'),
 };
 
@@ -38,6 +39,8 @@ const ARACLAR = [
     birakAlt: 'JPG, PNG, WEBP… sırayı aşağıda ayarla', liste: true, buton: 'PDF oluştur' },
   { id: 'pdfGorsel', grup: 'Dönüştür', ad: "PDF'ten görsele", ikon: IKON.pdfGorsel, kabul: PDF,
     aciklama: 'Her sayfayı ayrı bir görsel olarak kaydeder.', birakAlt: 'PDF bırak', otomatik: true },
+  { id: 'kisayol', grup: 'Kısa yollar', ad: 'Masaüstü ve sağ tık', ikon: IKON.kisayol, kabul: [],
+    aciklama: 'Uygulamayı açmadan dönüştür: masaüstündeki simgeye sürükle-bırak, ya da dosyaya sağ tıkla.' },
   { id: 'birlestir', grup: 'PDF araçları', ad: 'Birleştir', ikon: IKON.birlestir, kabul: PDF,
     aciklama: 'Birden fazla PDF\'i listedeki sırayla tek dosyada birleştirir.',
     birakAlt: 'PDF\'leri bırak, sırayı aşağıda ayarla', liste: true, buton: 'Birleştir' },
@@ -100,6 +103,9 @@ function aracSec(a) {
   $('#aciklama').textContent = a.aciklama;
   $('#birak-alt').textContent = a.birakAlt;
   $('#tarama').hidden = a.id !== 'tara';
+  $('#birak').hidden = a.id === 'kisayol';
+  $('#sec').hidden = a.id === 'kisayol';
+  if (a.id === 'kisayol') kisayolDurumuAl();
   seceneklerCiz();
   listeCiz();
   if (a.id === 'tara') kartlariCiz();
@@ -120,9 +126,12 @@ const CEVIRICI_NOTU = {
 
 function seceneklerCiz() {
   const s = $('#secenekler');
-  if (arac.id === 'office') {
+  if (arac.id === 'kisayol') {
+    s.innerHTML = kisayolPaneli();
+  } else if (arac.id === 'office') {
     s.innerHTML = `<span class="secenek">${d('Dönüştürücü')} ${parcali('cevirici', [['otomatik', 'Otomatik'], ['office', 'Microsoft Office'], ['libreoffice', 'LibreOffice']], ayar.cevirici)}</span>
-      <span class="ipucu">${d(CEVIRICI_NOTU[ayar.cevirici] || CEVIRICI_NOTU.otomatik)}</span>`;
+      <span class="ipucu">${d(CEVIRICI_NOTU[ayar.cevirici] || CEVIRICI_NOTU.otomatik)}</span>
+      <button class="metin" data-git="kisayol">${IKON.kisayol} ${d('Uygulamayı açmadan: masaüstüne bırak-çevir simgesi ekle')}</button>`;
   } else if (arac.id === 'bol') {
     s.innerHTML = `<label class="secenek">${d('Her')} <input type="number" min="1" id="bolAdim" value="${ayar.bolAdim}"> ${d('sayfada bir dosya')}</label>`;
   } else if (arac.id === 'cikar') {
@@ -1026,6 +1035,147 @@ for (const b of document.querySelectorAll('#dil-sec button')) {
   });
 }
 
+// ---------- Kısa yollar ----------
+// Masaüstündeki simgeye bırakılan ya da sağ tık / Gönder menüsünden gelen dosyalar uygulamaya
+// komut satırıyla gelir. Rust ilk açılışın isteğini saklar; çalışırken gelenleri "disaridan" olayıyla yollar.
+const KISAYOL_EYLEMLERI = [
+  // Başlıklar masaüstündeki kısayolun adıyla aynı (Rust: kabuk::EYLEMLER).
+  ['pdf', DIL === 'en' ? 'Convert to PDF' : "PDF'e çevir", 'PowerPoint, Word, Excel ya da fotoğraf bırak → PDF masaüstüne'],
+  ['birlestir', DIL === 'en' ? 'Merge PDFs' : 'PDF birleştir', "Birkaç PDF bırak → tek PDF masaüstüne (ada göre sıralı)"],
+  ['sikistir', DIL === 'en' ? 'Compress PDF' : 'PDF sıkıştır', 'PDF bırak → küçültülmüş kopyası masaüstüne'],
+];
+let kisayolDurumu = null; // { masaustu: [eylem], gonder, sagtik }
+let kisayolMesgul = false;
+
+async function kisayolDurumuAl() {
+  try { kisayolDurumu = await invoke('kisayol_durumu'); } catch (_) { kisayolDurumu = { masaustu: [], gonder: false, sagtik: false }; }
+  if (arac.id === 'kisayol') seceneklerCiz();
+}
+
+function kisayolPaneli() {
+  const k = kisayolDurumu;
+  if (!k) return `<span class="ipucu">${d('Hazırlanıyor…')}</span>`;
+  const dugme = (tur, eylem, acik) => `<button class="${acik ? 'metin' : 'birincil'}" data-kisayol="${tur}" data-eylem="${eylem || ''}" data-acik="${!acik}" ${kisayolMesgul ? 'disabled' : ''}>${d(acik ? 'Kaldır' : tur === 'masaustu' ? 'Masaüstüne ekle' : 'Ekle')}</button>`;
+  const masaustu = KISAYOL_EYLEMLERI.map(([e, baslik, alt]) => {
+    const var_ = k.masaustu.includes(e);
+    return `<div class="ks-satir"><img src="simge-${e}.png" alt=""><div><b>${kacis(baslik)}</b><span>${d(alt)}</span></div>
+      ${var_ ? `<span class="ks-var">${d('Masaüstünde')}</span>` : ''}${dugme('masaustu', e, var_)}</div>`;
+  }).join('');
+  return `<div class="kisayollar">
+    <h3>${d('Masaüstü simgeleri')}</h3>
+    <p class="ipucu">${d('Dosyaları simgenin üzerine sürükleyip bırak. Uygulama kendiliğinden açılır, işi yapar, sonucu masaüstüne koyar ve kapanır.')}</p>
+    ${masaustu}
+    <h3>${d('Dosya menüleri')}</h3>
+    <div class="ks-satir"><div><b>${d('Sağ tık menüsü')}</b><span>${d("Office dosyaları ve fotoğraflarda “PDF'e çevir”, PDF'lerde “PDF sıkıştır” ve “PDF birleştir”. Sonuç dosyanın yanına kaydedilir.")}</span></div>
+      ${k.sagtik ? `<span class="ks-var">${d('Açık')}</span>` : ''}${dugme('sagtik', '', k.sagtik)}</div>
+    <div class="ks-satir"><div><b>${d('Gönder menüsü')}</b><span>${d('Birden çok dosyayı seçip Gönder → “PDF\'e çevir (Chameleon)”. Sonuç dosyaların yanına kaydedilir.')}</span></div>
+      ${k.gonder ? `<span class="ks-var">${d('Açık')}</span>` : ''}${dugme('gonder', '', k.gonder)}</div>
+    <p class="ipucu">${d('Windows 11\'de bu girdiler sağ tıkta “Daha fazla seçenek göster” altında (ya da Shift + sağ tık) görünür. Hepsi yalnızca senin kullanıcı hesabına eklenir; yönetici izni gerekmez.')}</p>
+  </div>`;
+}
+
+$('#secenekler').addEventListener('click', async (e) => {
+  const git = e.target.closest('button[data-git]');
+  if (git) { aracSec(ARACLAR.find((a) => a.id === git.dataset.git)); return; }
+  const b = e.target.closest('button[data-kisayol]');
+  if (!b || kisayolMesgul) return;
+  kisayolMesgul = true;
+  seceneklerCiz();
+  try {
+    kisayolDurumu = await invoke('kisayol_ayarla', { tur: b.dataset.kisayol, eylem: b.dataset.eylem || null, acik: b.dataset.acik === 'true' });
+  } catch (h) {
+    const anahtar = `is-${++isSayac}`;
+    isEkle(anahtar, d('Kısa yol'), '');
+    isGuncelle(anahtar, 'hata', String(h), []);
+  }
+  kisayolMesgul = false;
+  seceneklerCiz();
+});
+
+// Kısa sürede art arda gelen istekleri (sağ tıkta seçili birkaç dosya ayrı ayrı gelir) birleştir.
+let bekleyen = null;
+let bekleyenZaman = 0;
+function disaridanGeldi(istek) {
+  kapanisIptal(); // geri sayım sürerken yeni dosya geldiyse açık kal
+  if (bekleyen && bekleyen.eylem === istek.eylem && bekleyen.masaustu === istek.masaustu) {
+    for (const y of istek.dosyalar) if (!bekleyen.dosyalar.includes(y)) bekleyen.dosyalar.push(y);
+    bekleyen.yeni = bekleyen.yeni && istek.yeni;
+  } else {
+    if (bekleyen) hizliCalistir(bekleyen);
+    bekleyen = { ...istek, dosyalar: [...istek.dosyalar] };
+  }
+  clearTimeout(bekleyenZaman);
+  bekleyenZaman = setTimeout(() => { const i = bekleyen; bekleyen = null; hizliCalistir(i); }, 700);
+}
+
+// Office sonuçları olaylarla gelir; komut dönse bile son olay biraz gecikebilir.
+async function bitmesiniBekle(anahtarlar) {
+  const durum = (k) => isler.get(k)?.className;
+  for (let i = 0; i < 50 && anahtarlar.some((k) => !['tamam', 'hata'].includes(durum(k))); i++) await new Promise((r) => setTimeout(r, 100));
+  return anahtarlar.every((k) => durum(k) === 'tamam');
+}
+
+const dogalSira = (a, b) => ad(a).localeCompare(ad(b), undefined, { numeric: true, sensitivity: 'base' });
+
+async function hizliCalistir({ dosyalar, eylem, masaustu, yeni }) {
+  const islerim = [];
+  const hataEkle = (baslik, ileti) => { const k = `is-${++isSayac}`; isEkle(k, baslik, ''); isGuncelle(k, 'hata', ileti, []); islerim.push(Promise.resolve(false)); };
+  const calistirIzle = (baslik, ileti, is) => {
+    const k = `is-${++isSayac}`;
+    isEkle(k, baslik, ileti);
+    islerim.push(is(k).then((c) => { isGuncelle(k, 'tamam', '', c); return true; }, (h) => { isGuncelle(k, 'hata', String(h), []); return false; }));
+  };
+  const pdfler = dosyalar.filter((y) => uzanti(y) === 'pdf').sort(dogalSira);
+  if (eylem === 'pdf') {
+    const office = dosyalar.filter((y) => OFFICE.includes(uzanti(y)));
+    const gorseller = dosyalar.filter((y) => GORSEL.includes(uzanti(y))).sort(dogalSira);
+    if (office.length) {
+      for (const y of office) isEkle(y, ad(y), d('Sırada…'));
+      islerim.push(invoke('office', { dosyalar: office, motor: ayar.cevirici, masaustu })
+        .then(() => bitmesiniBekle(office))
+        .catch((h) => { office.forEach((y) => isGuncelle(y, 'hata', String(h), [])); return false; }));
+    }
+    if (gorseller.length) {
+      calistirIzle(gorseller.length > 1 ? d('{n} görsel → PDF', { n: gorseller.length }) : ad(gorseller[0]), d('Oluşturuluyor…'),
+        () => invoke('gorsellerden_pdf', { dosyalar: gorseller, masaustu }));
+    }
+    for (const y of dosyalar.filter((y) => !office.includes(y) && !gorseller.includes(y))) {
+      hataEkle(ad(y), uzanti(y) === 'pdf' ? d('Zaten PDF') : d("PDF'e çevrilemeyen dosya türü"));
+    }
+  } else if (eylem === 'birlestir') {
+    if (pdfler.length < 2) hataEkle(d('PDF birleştir'), d('Birleştirmek için en az iki PDF bırak'));
+    else calistirIzle(d('{n} PDF birleştiriliyor', { n: pdfler.length }), d('Birleştiriliyor…'), () => invoke('birlestir', { dosyalar: pdfler, masaustu }));
+  } else if (eylem === 'sikistir') {
+    if (!pdfler.length) hataEkle(d('PDF sıkıştır'), d('PDF bırak'));
+    for (const y of pdfler) calistirIzle(ad(y), d('Görseller küçültülüyor…'), () => invoke('sikistir', { dosya: y, seviye: ayar.seviye, masaustu }));
+  }
+  const sonuc = await Promise.all(islerim);
+  // Yalnızca bu iş için açıldıysa ve her şey yolundaysa kendiliğinden kapan.
+  if (yeni && sonuc.length && sonuc.every(Boolean)) kapanisSayaci(masaustu);
+}
+
+let kapanisZamani = 0;
+function kapanisIptal() {
+  clearInterval(kapanisZamani);
+  document.querySelector('.tost')?.remove();
+}
+
+function kapanisSayaci(masaustu) {
+  kapanisIptal();
+  const t = document.createElement('div');
+  t.className = 'tost';
+  let n = 4;
+  const yaz = () => { t.innerHTML = `<span>${d(masaustu ? 'Bitti — masaüstüne kaydedildi.' : 'Bitti.')} ${d('{n} sn içinde kapanıyor', { n })}</span><button class="metin" id="acik-kalsin">${d('Açık kalsın')}</button>`; };
+  yaz();
+  document.body.appendChild(t);
+  kapanisZamani = setInterval(() => { n -= 1; if (n <= 0) { clearInterval(kapanisZamani); invoke('kapat'); } else yaz(); }, 1000);
+  t.addEventListener('click', (e) => { if (e.target.closest('#acik-kalsin')) kapanisIptal(); });
+}
+
+listen('disaridan', ({ payload }) => disaridanGeldi(payload));
+invoke('acilis_istegi').then((i) => { if (i) disaridanGeldi(i); }).catch(() => {});
+
 let ilkArac = ARACLAR[0];
 try { ilkArac = ARACLAR.find((a) => a.id === localStorage.getItem('arac')) || ilkArac; } catch (_) {}
 aracSec(ilkArac);
+

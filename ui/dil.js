@@ -58,6 +58,30 @@ const SOZLUK = {
   'Önce yukarıya parolayı yaz': 'Type the password above first', 'Numaralanıyor…': 'Numbering…', 'Filigran ekleniyor…': 'Adding watermark…',
   '{n} PDF birleştiriliyor': 'Merging {n} PDFs', 'Birleştiriliyor…': 'Merging…', '{n} görsel → PDF': '{n} images → PDF',
   'Oluşturuluyor…': 'Creating…', 'Sayfa {a} çıkarılıyor…': 'Extracting pages {a}…', '{n} dosya': '{n} files', '{n} sayfa': '{n} pages',
+  // Kısa yollar
+  'Kısa yollar': 'Shortcuts', 'Masaüstü ve sağ tık': 'Desktop & right-click',
+  'Uygulamayı açmadan dönüştür: masaüstündeki simgeye sürükle-bırak, ya da dosyaya sağ tıkla.':
+    'Convert without opening the app: drag files onto a desktop icon, or right-click a file.',
+  'PowerPoint, Word, Excel ya da fotoğraf bırak → PDF masaüstüne': 'Drop PowerPoint, Word, Excel or photos → PDF on the desktop',
+  'Birkaç PDF bırak → tek PDF masaüstüne (ada göre sıralı)': 'Drop several PDFs → one PDF on the desktop (sorted by name)',
+  'PDF bırak → küçültülmüş kopyası masaüstüne': 'Drop a PDF → a smaller copy on the desktop',
+  'PDF birleştir': 'Merge PDFs', 'PDF sıkıştır': 'Compress PDF',
+  'Kaldır': 'Remove', 'Masaüstüne ekle': 'Add to desktop', 'Ekle': 'Add', 'Masaüstünde': 'On desktop', 'Açık': 'On',
+  'Masaüstü simgeleri': 'Desktop icons', 'Dosya menüleri': 'File menus',
+  'Dosyaları simgenin üzerine sürükleyip bırak. Uygulama kendiliğinden açılır, işi yapar, sonucu masaüstüne koyar ve kapanır.':
+    'Drag files onto the icon and let go. The app opens by itself, does the job, puts the result on the desktop and closes.',
+  'Sağ tık menüsü': 'Right-click menu',
+  "Office dosyaları ve fotoğraflarda “PDF'e çevir”, PDF'lerde “PDF sıkıştır” ve “PDF birleştir”. Sonuç dosyanın yanına kaydedilir.":
+    '“Convert to PDF” on Office files and photos, “Compress PDF” and “Merge PDFs” on PDFs. The result is saved next to the file.',
+  'Gönder menüsü': 'Send To menu',
+  "Birden çok dosyayı seçip Gönder → “PDF'e çevir (Chameleon)”. Sonuç dosyaların yanına kaydedilir.":
+    'Select several files, then Send to → “Convert to PDF (Chameleon)”. The result is saved next to the files.',
+  "Windows 11'de bu girdiler sağ tıkta “Daha fazla seçenek göster” altında (ya da Shift + sağ tık) görünür. Hepsi yalnızca senin kullanıcı hesabına eklenir; yönetici izni gerekmez.":
+    'On Windows 11 these entries appear under “Show more options” (or Shift + right-click). Everything is added to your user account only; no administrator rights needed.',
+  'Kısa yol': 'Shortcut', 'Uygulamayı açmadan: masaüstüne bırak-çevir simgesi ekle': 'Without opening the app: add a drop-to-convert desktop icon', 'Zaten PDF': 'Already a PDF', "PDF'e çevrilemeyen dosya türü": 'This file type cannot be converted to PDF',
+  'Birleştirmek için en az iki PDF bırak': 'Drop at least two PDFs to merge',
+  'Bitti — masaüstüne kaydedildi.': 'Done — saved to the desktop.', 'Bitti.': 'Done.',
+  '{n} sn içinde kapanıyor': 'closing in {n} s', 'Açık kalsın': 'Keep open',
   // Office ve model
   'Office: hazır': 'Office: ready',
   "Office ya da LibreOffice bulunamadı — PDF'e çevirme çalışmaz": 'Neither Office nor LibreOffice found — Office → PDF will not work',

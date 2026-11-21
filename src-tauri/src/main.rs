@@ -5,6 +5,7 @@
 mod dil;
 mod duzen;
 mod gorsel;
+mod kabuk;
 mod libreoffice;
 mod model;
 mod pdf;
@@ -19,7 +20,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use tauri::{AppHandle, Emitter};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -63,6 +65,16 @@ fn klasoru(yol: &Path) -> PathBuf {
     yol.parent().map(Path::to_path_buf).unwrap_or_default()
 }
 
+/// Sonucun yazılacağı klasör: masaüstü istendiyse masaüstü, değilse kaynağın yanı.
+fn cikis_klasoru(yol: &Path, masaustu: Option<bool>) -> PathBuf {
+    if masaustu == Some(true) {
+        if let Some(m) = kabuk::masaustu() {
+            return m;
+        }
+    }
+    klasoru(yol)
+}
+
 fn yazi(yollar: &[PathBuf]) -> Vec<String> {
     yollar.iter().map(|p| p.to_string_lossy().into_owned()).collect()
 }
@@ -86,14 +98,14 @@ fn office_uygulamasi(yol: &Path) -> Option<&'static str> {
 /// Otomatikte dosyanın Office uygulaması kuruluysa Office, değilse LibreOffice kullanılır;
 /// Office bir dosyada başarısız olursa LibreOffice ile bir kez daha denenir.
 #[tauri::command]
-async fn office(app: AppHandle, dosyalar: Vec<String>, motor: Option<String>) -> Result<(), String> {
+async fn office(app: AppHandle, dosyalar: Vec<String>, motor: Option<String>, masaustu: Option<bool>) -> Result<(), String> {
     arka_planda(move || {
         let mut ayrilan = HashSet::new();
         let isler: Vec<(String, PathBuf)> = dosyalar
             .iter()
             .map(|d| {
                 let k = PathBuf::from(d);
-                (d.clone(), benzersiz(&klasoru(&k), &govde(&k), "pdf", &mut ayrilan))
+                (d.clone(), benzersiz(&cikis_klasoru(&k, masaustu), &govde(&k), "pdf", &mut ayrilan))
             })
             .collect();
         let motor = motor.unwrap_or_default();
@@ -241,11 +253,11 @@ fn office_hatasi(ham: &str) -> String {
 }
 
 #[tauri::command]
-async fn birlestir(dosyalar: Vec<String>) -> Result<Vec<String>, String> {
+async fn birlestir(dosyalar: Vec<String>, masaustu: Option<bool>) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let yollar: Vec<PathBuf> = dosyalar.iter().map(PathBuf::from).collect();
         let ilk = yollar.first().ok_or("Dosya yok")?;
-        let hedef = benzersiz(&klasoru(ilk), &format!("{} - {}", govde(ilk), dil::t("birleştirilmiş", "merged")), "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&cikis_klasoru(ilk, masaustu), &format!("{} - {}", govde(ilk), dil::t("birleştirilmiş", "merged")), "pdf", &mut HashSet::new());
         pdf::birlestir(&yollar, &hedef)?;
         Ok(yazi(&[hedef]))
     })
@@ -298,12 +310,12 @@ async fn dondur(dosya: String, derece: i64, aralik: String) -> Result<Vec<String
 }
 
 #[tauri::command]
-async fn gorsellerden_pdf(dosyalar: Vec<String>) -> Result<Vec<String>, String> {
+async fn gorsellerden_pdf(dosyalar: Vec<String>, masaustu: Option<bool>) -> Result<Vec<String>, String> {
     arka_planda(move || {
         let yollar: Vec<PathBuf> = dosyalar.iter().map(PathBuf::from).collect();
         let ilk = yollar.first().ok_or(dil::t("Görsel yok", "No images"))?;
         let ad = if yollar.len() == 1 { govde(ilk) } else { dil::s(format!("{} ve {} görsel", govde(ilk), yollar.len() - 1), format!("{} and {} more", govde(ilk), yollar.len() - 1)) };
-        let hedef = benzersiz(&klasoru(ilk), &ad, "pdf", &mut HashSet::new());
+        let hedef = benzersiz(&cikis_klasoru(ilk, masaustu), &ad, "pdf", &mut HashSet::new());
         pdf::gorsellerden(&yollar, &hedef)?;
         Ok(yazi(&[hedef]))
     })
@@ -425,9 +437,10 @@ fn kb(b: u64) -> String {
 }
 
 #[tauri::command]
-async fn sikistir(dosya: String, seviye: u8) -> Result<Vec<String>, String> {
+async fn sikistir(dosya: String, seviye: u8, masaustu: Option<bool>) -> Result<Vec<String>, String> {
     arka_planda(move || {
-        let (k, hedef) = yanina(&dosya, dil::t("sıkıştırılmış", "compressed"));
+        let k = PathBuf::from(&dosya);
+        let hedef = benzersiz(&cikis_klasoru(&k, masaustu), &format!("{} - {}", govde(&k), dil::t("sıkıştırılmış", "compressed")), "pdf", &mut HashSet::new());
         let (once, sonra, _) = duzen::sikistir(&k, &hedef, seviye)?;
         if sonra >= once {
             let _ = std::fs::remove_file(&hedef);
@@ -570,6 +583,34 @@ async fn office_durumu() -> OfficeDurumu {
         .unwrap_or(OfficeDurumu { office: vec![], libreoffice: false })
 }
 
+/// Uygulama dosyalarla başlatıldıysa (kısayola bırakma, sağ tık, Gönder) o istek; bir kez okunur.
+struct Acilis(Mutex<Option<kabuk::Istek>>);
+
+#[tauri::command]
+fn acilis_istegi(durum: tauri::State<Acilis>) -> Option<kabuk::Istek> {
+    durum.0.lock().ok()?.take()
+}
+
+#[tauri::command]
+async fn kisayol_durumu() -> Result<kabuk::Durum, String> {
+    arka_planda(|| Ok(kabuk::durum())).await
+}
+
+#[tauri::command]
+async fn kisayol_ayarla(tur: String, eylem: Option<String>, acik: bool) -> Result<kabuk::Durum, String> {
+    arka_planda(move || {
+        kabuk::ayarla(&tur, eylem.as_deref().unwrap_or("pdf"), acik)?;
+        Ok(kabuk::durum())
+    })
+    .await
+}
+
+/// Yalnızca bir iş için açılan pencere, iş bitince kendini kapatır.
+#[tauri::command]
+fn kapat(app: AppHandle) {
+    app.exit(0);
+}
+
 fn main() {
     // Konsol çıktısı yok; panik olursa en azından geçici klasöre not düş.
     std::panic::set_hook(Box::new(|bilgi| {
@@ -577,10 +618,22 @@ fn main() {
             let _ = writeln!(f, "{bilgi}");
         }
     }));
+    let argumanlar: Vec<String> = std::env::args().skip(1).collect();
     tauri::Builder::default()
+        // İlk eklenti olmalı: ikinci açılışın dosyalarını çalışan pencereye verip kendini kapatır.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _klasor| {
+            if let Some(i) = kabuk::arguman_coz(argv.get(1..).unwrap_or_default(), false) {
+                let _ = app.emit("disaridan", i);
+            }
+            if let Some(p) = app.get_webview_window("main") {
+                let _ = p.unminimize();
+                let _ = p.show();
+                let _ = p.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
+        .manage(Acilis(Mutex::new(kabuk::arguman_coz(&argumanlar, true))))
         .setup(|app| {
-            use tauri::Manager;
             // Gizli bir süreçten başlatılınca Windows ilk pencereyi simge durumunda açabiliyor.
             if let Some(p) = app.get_webview_window("main") {
                 if p.is_minimized().unwrap_or(false) {
@@ -615,7 +668,11 @@ fn main() {
             dil_ayarla,
             modeller,
             model_indir,
-            model_sil
+            model_sil,
+            acilis_istegi,
+            kisayol_durumu,
+            kisayol_ayarla,
+            kapat
         ])
         .run(tauri::generate_context!())
         .expect("Chameleon PDF başlatılamadı");
