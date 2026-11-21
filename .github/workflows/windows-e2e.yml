@@ -25,12 +25,13 @@ jobs:
         run: |
           pip install --quiet python-pptx
           python -c "from pptx import Presentation; from pptx.util import Inches; p=Presentation(); s=p.slides.add_slide(p.slide_layouts[1]); s.shapes.title.text='Chameleon PDF deneme'; s.placeholders[1].text='Masaüstü simgesine bırakıldı → PDF'; s2=p.slides.add_slide(p.slide_layouts[5]); s2.shapes.title.text='İkinci slayt ğüşıöç'; p.save('ornek.pptx')"
-      - name: Birim testleri
-        working-directory: src-tauri
-        run: cargo test -- --test-threads=1
       - name: Uçtan uca kısa yol denemesi
         shell: pwsh
         run: ./scripts/e2e-kisayol.ps1 -Exe src-tauri/target/release/chameleon-pdf.exe -Pptx ornek.pptx
+      - name: Birim testleri
+        if: always()
+        working-directory: src-tauri
+        run: cargo test -- --test-threads=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

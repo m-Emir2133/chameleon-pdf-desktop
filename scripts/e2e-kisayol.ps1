@@ -44,48 +44,44 @@ public static class Birak {
   [StructLayout(LayoutKind.Sequential)] public struct POINTL { public int x; public int y; }
   [ComImport, Guid("00000122-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   interface IDropTarget {
-    [PreserveSig] int DragEnter([MarshalAs(UnmanagedType.Interface)] object o, uint k, POINTL p, ref uint e);
+    [PreserveSig] int DragEnter(IntPtr veri, uint k, POINTL p, ref uint e);
     [PreserveSig] int DragOver(uint k, POINTL p, ref uint e);
     [PreserveSig] int DragLeave();
-    [PreserveSig] int Drop([MarshalAs(UnmanagedType.Interface)] object o, uint k, POINTL p, ref uint e);
+    [PreserveSig] int Drop(IntPtr veri, uint k, POINTL p, ref uint e);
   }
-  [ComImport, Guid("000214E6-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-  interface IShellFolder {
-    void ParseDisplayName(IntPtr h, IntPtr b, [MarshalAs(UnmanagedType.LPWStr)] string n, IntPtr e, out IntPtr p, IntPtr a);
-    void EnumObjects(IntPtr h, int f, out IntPtr e);
-    void BindToObject(IntPtr p, IntPtr b, ref Guid r, out IntPtr o);
-    void BindToStorage(IntPtr p, IntPtr b, ref Guid r, out IntPtr o);
-    [PreserveSig] int CompareIDs(IntPtr l, IntPtr a, IntPtr b);
-    void CreateViewObject(IntPtr h, ref Guid r, out IntPtr o);
-    void GetAttributesOf(uint c, IntPtr a, ref uint f);
-    void GetUIObjectOf(IntPtr h, uint c, [In] IntPtr[] a, ref Guid r, IntPtr z, [MarshalAs(UnmanagedType.Interface)] out object o);
+  [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellItem {
+    [PreserveSig] int BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv);
   }
-  [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
-  static extern void SHParseDisplayName(string n, IntPtr b, out IntPtr p, uint i, out uint o);
-  [DllImport("shell32.dll", PreserveSig = false)]
-  static extern void SHBindToParent(IntPtr p, ref Guid r, [MarshalAs(UnmanagedType.Interface)] out object o, out IntPtr son);
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+  static extern int SHCreateItemFromParsingName(string yol, IntPtr pbc, ref Guid riid, out IntPtr ppv);
 
-  static object UiNesnesi(string yol, Guid iid) {
-    IntPtr pidl; uint a; SHParseDisplayName(yol, IntPtr.Zero, out pidl, 0, out a);
-    Guid isf = typeof(IShellFolder).GUID; object f; IntPtr son;
-    SHBindToParent(pidl, ref isf, out f, out son);
-    object o; ((IShellFolder)f).GetUIObjectOf(IntPtr.Zero, 1, new[] { son }, ref iid, IntPtr.Zero, out o);
-    return o;
+  static IntPtr Isleyici(string yol, string bhid, string iid) {
+    Guid isi = typeof(IShellItem).GUID; IntPtr p;
+    int h = SHCreateItemFromParsingName(yol, IntPtr.Zero, ref isi, out p);
+    if (h != 0) throw new Exception(string.Format("SHCreateItemFromParsingName 0x{0:X} {1}", h, yol));
+    var oge = (IShellItem)Marshal.GetObjectForIUnknown(p); Marshal.Release(p);
+    Guid b = new Guid(bhid), i = new Guid(iid); IntPtr sonuc;
+    h = oge.BindToHandler(IntPtr.Zero, ref b, ref i, out sonuc);
+    if (h != 0) throw new Exception(string.Format("BindToHandler 0x{0:X} {1}", h, yol));
+    return sonuc;
   }
 
   public static string Yap(string dosya, string hedef) {
     string sonuc = null;
     var t = new Thread(() => {
       try {
-        object veri = UiNesnesi(dosya, new Guid("0000010e-0000-0000-C000-000000000046"));
-        var dt = (IDropTarget)UiNesnesi(hedef, typeof(IDropTarget).GUID);
+        // BHID_DataObject: Explorer'ın sürüklerken taşıdığı veri; BHID_SFUIObject + IID_IDropTarget: bırakılan simge.
+        IntPtr veri = Isleyici(dosya, "b8c0bd9f-ed24-455c-83e6-d5390c4fe8c4", "0000010e-0000-0000-C000-000000000046");
+        IntPtr dtp = Isleyici(hedef, "3981e225-f559-11d3-8e3a-00c04f6837d5", "00000122-0000-0000-C000-000000000046");
+        var dt = (IDropTarget)Marshal.GetObjectForIUnknown(dtp);
         var p = new POINTL(); uint e = 7; const uint SOL = 1;
         int h1 = dt.DragEnter(veri, SOL, p, ref e); uint e2 = e;
         int h2 = dt.DragOver(SOL, p, ref e2);
         int h3 = dt.Drop(veri, SOL, p, ref e2);
         Thread.Sleep(3000); // bırakma işleyicisi programı arka planda başlatabilir
         sonuc = string.Format("DragEnter=0x{0:X} DragOver=0x{1:X} Drop=0x{2:X} effect={3}", h1, h2, h3, e2);
-      } catch (Exception x) { sonuc = "HATA " + x; }
+      } catch (Exception x) { sonuc = "HATA " + x.Message; }
     });
     t.SetApartmentState(ApartmentState.STA); t.Start(); t.Join();
     return sonuc;
@@ -111,7 +107,9 @@ Copy-Item -LiteralPath $Pptx $kaynak -Force
 $pdf = Join-Path $masaustu 'Sunum deneme ğüş.pdf'
 Remove-Item -LiteralPath $pdf -ErrorAction SilentlyContinue
 $t0 = Get-Date
-Write-Host "  $([Birak]::Yap($kaynak, $lnk))"
+$birak = [Birak]::Yap($kaynak, $lnk)
+Write-Host "  $birak"
+Kontrol ($birak -notlike 'HATA*') 'Explorer sürükle-bırak çağrısı yapıldı'
 Kontrol (Bekle { (Uygulama).Count -gt 0 -or (Test-Path -LiteralPath $pdf) } 30) 'bırakınca uygulama başladı'
 Start-Sleep 3; EkranGoruntusu '1-birakinca.png'
 Kontrol (Bekle { Test-Path -LiteralPath $pdf } 240) "PDF masaüstünde: $pdf"
